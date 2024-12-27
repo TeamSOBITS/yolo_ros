@@ -36,6 +36,8 @@ def generate_launch_description():
     weight_file_cmd = DeclareLaunchArgument(
         "weight_file", description="weight file path",
         default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "test.pt")
+        # default_value="yolov8m.pt"
+        # default_value="yolov10m.pt"
     )
 
     init_prediction = LaunchConfiguration("init_prediction")
@@ -46,7 +48,7 @@ def generate_launch_description():
     image_topic_name = LaunchConfiguration("image_topic_name")
     image_topic_name_cmd = DeclareLaunchArgument(
         "image_topic_name",
-        default_value="/rgb/image_raw",
+        default_value="/camera/camera/color/image_raw",
         description="ROS Topic Name of sensor_msgs/msg/Image message",
     )
 
@@ -105,7 +107,7 @@ def generate_launch_description():
     image_show = LaunchConfiguration("image_show")
     image_show_cmd = DeclareLaunchArgument(
         "image_show",
-        default_value="True",
+        default_value="False",
         description="image show flag",
     )
 

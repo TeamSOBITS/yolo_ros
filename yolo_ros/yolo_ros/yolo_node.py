@@ -62,7 +62,7 @@ class YoloNode(LifecycleNode):
 
         # params
         self.declare_parameter("model_type", "YOLO")
-        self.declare_parameter("model", "yolov8m.pt")
+        self.declare_parameter("weight_file", "yolov8m.pt")
 
         self.declare_parameter("image_topic_name", "image_raw")
         self.declare_parameter("threshold", 0.5)
@@ -86,11 +86,11 @@ class YoloNode(LifecycleNode):
         self.model_type = (
             self.get_parameter("model_type").get_parameter_value().string_value
         )
-        self.model = self.get_parameter("model").get_parameter_value().string_value
+        self.model = self.get_parameter("weight_file").get_parameter_value().string_value
 
         # inference params
         self.image_topic_name = (
-            self.get_parameter("image_topic_name").get_parameter_value().double_value
+            self.get_parameter("image_topic_name").get_parameter_value().string_value
         )
         self.threshold = (
             self.get_parameter("threshold").get_parameter_value().double_value
@@ -208,9 +208,7 @@ class YoloNode(LifecycleNode):
         return response
 
     def image_cb(self, msg: Image) -> None:
-
         if self.enable:
-            detections_image_msg = msg
             header = msg.header
 
             # convert image + predict
@@ -267,8 +265,8 @@ class YoloNode(LifecycleNode):
                         bbox.bbox.center.theta = float(box[4])
 
 
-                    ohwp.pose.pose.position = Point(x=float(box[0]), y=float(box[1]), z=-1)
-                    ohwp.pose.pose.orientation = Quaternion(x=0, y=0, z=0, w=1)
+                    ohwp.pose.pose.position = Point(x=float(box[0]), y=float(box[1]), z=float(-1))
+                    ohwp.pose.pose.orientation = Quaternion(x=float(0), y=float(0), z=float(0), w=float(1))
                     ohwp.pose.covariance = [float(0)]*36
                     bbox.results += [ohwp]
                     bbox.bbox.center.position.x = float(box[0])
@@ -277,6 +275,32 @@ class YoloNode(LifecycleNode):
                     bbox.bbox.size_y = float(box[3])
                     detections_bboxes_msg.detections += [bbox]
 
+                    #generate result image
+                    # label = f"{bounding_box.Class} {bounding_box.probability:.2f}"
+                    # (w, h), baseline = cv2.getTextSize(label,
+                    #                         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                    #                         fontScale=0.5,
+                    #                         thickness=1)
+                    # cv2.rectangle(cv_image,
+                    #             pt1=(int(box.xyxy[0][0]),int(box.xyxy[0][1])),
+                    #             pt2=(int(box.xyxy[0][2]),int(box.xyxy[0][3])),
+                    #             color=colors(c, True),
+                    #             thickness=2,
+                    #             lineType=cv2.LINE_4)
+                    # cv2.rectangle(cv_image,
+                    #             pt1=(int(box.xyxy[0][0]), int(box.xyxy[0][1]) - h),
+                    #             pt2=(int(box.xyxy[0][0]) + w, int(box.xyxy[0][1])),
+                    #             color=colors(c, True),
+                    #             thickness=-1,
+                    #             lineType=cv2.LINE_4)
+                    # cv2.putText(cv_image,
+                    #             text=label,
+                    #             org=(int(box.xyxy[0][0]),int(box.xyxy[0][1])),
+                    #             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                    #             fontScale=0.5,
+                    #             color=(255,255,255),
+                    #             thickness=1,
+                    #             lineType=cv2.LINE_AA)
 
                 if results.keypoints:
                     if results.keypoints[i].conf is None:
@@ -284,7 +308,7 @@ class YoloNode(LifecycleNode):
                     for kp_id, (p, conf) in enumerate(zip(results.keypoints[i].xy[0], results.keypoints[i].conf[0])):
                         if conf >= self.threshold:
                             kp.key_names += [str(kp_id + 1)]
-                            kp.key_points += [Point(x=float(p[0]), y=float(p[1]), z=-1)]
+                            kp.key_points += [Point(x=float(p[0]), y=float(p[1]), z=float(-1))]
                             # kp.key_conf += [float(conf)]
                     detections_keypoints_msg.key_points_array += [kp]
 
@@ -304,6 +328,8 @@ class YoloNode(LifecycleNode):
                 #     ms.width = results.orig_img.shape[1]
                 #     detections_masks_msg.data = [ms]
 
+
+            detections_image_msg = self.bridge.cv2_to_imgmsg(cv_image, "bgr8")
 
             # publish detections
             self._pub_rect.publish(detections_bboxes_msg)

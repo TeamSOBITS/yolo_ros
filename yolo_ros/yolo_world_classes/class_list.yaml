@@ -1,6 +1,6 @@
-yolo_node/yolo_node:
+yolo_ros/yolo_node:
   ros__parameters:
     classes:
-      - "apple"
-      - "orange"
-      - "pair"
+      - "person"
+      - "snack"
+      - "handbag"
