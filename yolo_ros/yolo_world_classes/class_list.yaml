@@ -1,0 +1,6 @@
+yolo_node/yolo_node:
+  ros__parameters:
+    classes:
+      - "apple"
+      - "orange"
+      - "pair"

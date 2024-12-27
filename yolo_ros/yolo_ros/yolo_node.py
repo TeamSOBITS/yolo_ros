@@ -34,41 +34,49 @@ from ultralytics.engine.results import Boxes
 from ultralytics.engine.results import Masks
 from ultralytics.engine.results import Keypoints
 
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import Quaternion
 from std_srvs.srv import SetBool
+
+from sobits_interfaces.msg import KeyPoint
+from sobits_interfaces.msg import KeyPointArray
+
 from sensor_msgs.msg import Image
-from yolo_msgs.msg import Point2D
-from yolo_msgs.msg import BoundingBox2D
-from yolo_msgs.msg import Mask
-from yolo_msgs.msg import KeyPoint2D
-from yolo_msgs.msg import KeyPoint2DArray
-from yolo_msgs.msg import Detection
-from yolo_msgs.msg import DetectionArray
-from yolo_msgs.srv import SetClasses
+# from yolo_msgs.msg import Point2D
+# from yolo_msgs.msg import BoundingBox2D
+# from yolo_msgs.msg import Mask
+# from yolo_msgs.msg import KeyPoint2D
+# from yolo_msgs.msg import KeyPoint2DArray
+# from yolo_msgs.msg import Detection
+# from yolo_msgs.msg import DetectionArray
+# from yolo_msgs.srv import SetClasses
+from vision_msgs.msg import Detection2DArray
+from vision_msgs.msg import Detection2D
+from vision_msgs.msg import ObjectHypothesisWithPose
 
 
 class YoloNode(LifecycleNode):
 
     def __init__(self) -> None:
-        super().__init__("yolo_node")
+        super().__init__("yolo_ros")
 
         # params
         self.declare_parameter("model_type", "YOLO")
         self.declare_parameter("model", "yolov8m.pt")
-        self.declare_parameter("device", "cuda:0")
 
+        self.declare_parameter("image_topic_name", "image_raw")
         self.declare_parameter("threshold", 0.5)
         self.declare_parameter("iou", 0.5)
         self.declare_parameter("imgsz_height", 640)
         self.declare_parameter("imgsz_width", 640)
         self.declare_parameter("half", False)
         self.declare_parameter("max_det", 300)
-        self.declare_parameter("augment", False)
         self.declare_parameter("agnostic_nms", False)
         self.declare_parameter("retina_masks", False)
+        self.declare_parameter("image_show", False)
 
-        self.declare_parameter("enable", True)
-        self.declare_parameter("image_reliability", QoSReliabilityPolicy.BEST_EFFORT)
-
+        self.declare_parameter("init_prediction", True)
+        self.declare_parameter("classes", [""])
         self.type_to_model = {"YOLO": YOLO, "NAS": NAS, "World": YOLOWorld}
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
@@ -79,9 +87,11 @@ class YoloNode(LifecycleNode):
             self.get_parameter("model_type").get_parameter_value().string_value
         )
         self.model = self.get_parameter("model").get_parameter_value().string_value
-        self.device = self.get_parameter("device").get_parameter_value().string_value
 
         # inference params
+        self.image_topic_name = (
+            self.get_parameter("image_topic_name").get_parameter_value().double_value
+        )
         self.threshold = (
             self.get_parameter("threshold").get_parameter_value().double_value
         )
@@ -94,29 +104,31 @@ class YoloNode(LifecycleNode):
         )
         self.half = self.get_parameter("half").get_parameter_value().bool_value
         self.max_det = self.get_parameter("max_det").get_parameter_value().integer_value
-        self.augment = self.get_parameter("augment").get_parameter_value().bool_value
         self.agnostic_nms = (
             self.get_parameter("agnostic_nms").get_parameter_value().bool_value
         )
         self.retina_masks = (
             self.get_parameter("retina_masks").get_parameter_value().bool_value
         )
-
-        # ros params
-        self.enable = self.get_parameter("enable").get_parameter_value().bool_value
-        self.reliability = (
-            self.get_parameter("image_reliability").get_parameter_value().integer_value
+        self.image_show = (
+            self.get_parameter("image_show").get_parameter_value().bool_value
         )
 
+        # ros params
+        self.enable = self.get_parameter("init_prediction").get_parameter_value().bool_value
+        self.classes = self.get_parameter("classes").get_parameter_value().string_array_value
         # detection pub
         self.image_qos_profile = QoSProfile(
-            reliability=self.reliability,
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
             durability=QoSDurabilityPolicy.VOLATILE,
             depth=1,
         )
 
-        self._pub = self.create_lifecycle_publisher(DetectionArray, "detections", 10)
+        self._pub_rect     = self.create_lifecycle_publisher(Detection2DArray, "object_boxes"    , 1)
+        self._pub_keypoint = self.create_lifecycle_publisher(KeyPointArray   , "object_keypoints", 1)
+        # self._pub_mask     = self.create_lifecycle_publisher(MaskArray       , "object_masks"    , 1)
+        self._pub_img      = self.create_lifecycle_publisher(Image           , "detect_image"    , 1)
         self.cv_bridge = CvBridge()
 
         super().on_configure(state)
@@ -139,15 +151,13 @@ class YoloNode(LifecycleNode):
         except TypeError as e:
             self.get_logger().warn(f"Error while fuse: {e}")
 
-        self._enable_srv = self.create_service(SetBool, "enable", self.enable_cb)
+        self._enable_srv = self.create_service(SetBool, "run_ctrl", self.enable_cb)
 
         if isinstance(self.yolo, YOLOWorld):
-            self._set_classes_srv = self.create_service(
-                SetClasses, "set_classes", self.set_classes_cb
-            )
+            self.yolo.set_classes(self.classes)
 
         self._sub = self.create_subscription(
-            Image, "image_raw", self.image_cb, self.image_qos_profile
+            Image, self.image_topic_name, self.image_cb, self.image_qos_profile
         )
 
         super().on_activate(state)
@@ -159,16 +169,9 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"[{self.get_name()}] Deactivating...")
 
         del self.yolo
-        if "cuda" in self.device:
-            self.get_logger().info("Clearing CUDA cache")
-            torch.cuda.empty_cache()
 
         self.destroy_service(self._enable_srv)
         self._enable_srv = None
-
-        if isinstance(self.yolo, YOLOWorld):
-            self.destroy_service(self._set_classes_srv)
-            self._set_classes_srv = None
 
         self.destroy_subscription(self._sub)
         self._sub = None
@@ -181,7 +184,10 @@ class YoloNode(LifecycleNode):
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"[{self.get_name()}] Cleaning up...")
 
-        self.destroy_publisher(self._pub)
+        self.destroy_publisher(self._pub_rect)
+        self.destroy_publisher(self._pub_keypoint)
+        # self.destroy_publisher(self._pub_mask)
+        self.destroy_publisher(self._pub_img)
 
         del self.image_qos_profile
 
@@ -196,132 +202,16 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"[{self.get_name()}] Shutted down")
         return TransitionCallbackReturn.SUCCESS
 
-    def enable_cb(
-        self, request: SetBool.Request, response: SetBool.Response
-    ) -> SetBool.Response:
+    def enable_cb(self, request: SetBool.Request, response: SetBool.Response) -> SetBool.Response:
         self.enable = request.data
         response.success = True
         return response
 
-    def parse_hypothesis(self, results: Results) -> List[Dict]:
-
-        hypothesis_list = []
-
-        if results.boxes:
-            box_data: Boxes
-            for box_data in results.boxes:
-                hypothesis = {
-                    "class_id": int(box_data.cls),
-                    "class_name": self.yolo.names[int(box_data.cls)],
-                    "score": float(box_data.conf),
-                }
-                hypothesis_list.append(hypothesis)
-
-        elif results.obb:
-            for i in range(results.obb.cls.shape[0]):
-                hypothesis = {
-                    "class_id": int(results.obb.cls[i]),
-                    "class_name": self.yolo.names[int(results.obb.cls[i])],
-                    "score": float(results.obb.conf[i]),
-                }
-                hypothesis_list.append(hypothesis)
-
-        return hypothesis_list
-
-    def parse_boxes(self, results: Results) -> List[BoundingBox2D]:
-
-        boxes_list = []
-
-        if results.boxes:
-            box_data: Boxes
-            for box_data in results.boxes:
-
-                msg = BoundingBox2D()
-
-                # get boxes values
-                box = box_data.xywh[0]
-                msg.center.position.x = float(box[0])
-                msg.center.position.y = float(box[1])
-                msg.size.x = float(box[2])
-                msg.size.y = float(box[3])
-
-                # append msg
-                boxes_list.append(msg)
-
-        elif results.obb:
-            for i in range(results.obb.cls.shape[0]):
-                msg = BoundingBox2D()
-
-                # get boxes values
-                box = results.obb.xywhr[i]
-                msg.center.position.x = float(box[0])
-                msg.center.position.y = float(box[1])
-                msg.center.theta = float(box[4])
-                msg.size.x = float(box[2])
-                msg.size.y = float(box[3])
-
-                # append msg
-                boxes_list.append(msg)
-
-        return boxes_list
-
-    def parse_masks(self, results: Results) -> List[Mask]:
-
-        masks_list = []
-
-        def create_point2d(x: float, y: float) -> Point2D:
-            p = Point2D()
-            p.x = x
-            p.y = y
-            return p
-
-        mask: Masks
-        for mask in results.masks:
-
-            msg = Mask()
-
-            msg.data = [
-                create_point2d(float(ele[0]), float(ele[1]))
-                for ele in mask.xy[0].tolist()
-            ]
-            msg.height = results.orig_img.shape[0]
-            msg.width = results.orig_img.shape[1]
-
-            masks_list.append(msg)
-
-        return masks_list
-
-    def parse_keypoints(self, results: Results) -> List[KeyPoint2DArray]:
-
-        keypoints_list = []
-
-        points: Keypoints
-        for points in results.keypoints:
-
-            msg_array = KeyPoint2DArray()
-
-            if points.conf is None:
-                continue
-
-            for kp_id, (p, conf) in enumerate(zip(points.xy[0], points.conf[0])):
-
-                if conf >= self.threshold:
-                    msg = KeyPoint2D()
-
-                    msg.id = kp_id + 1
-                    msg.point.x = float(p[0])
-                    msg.point.y = float(p[1])
-                    msg.score = float(conf)
-
-                    msg_array.data.append(msg)
-
-            keypoints_list.append(msg_array)
-
-        return keypoints_list
-
     def image_cb(self, msg: Image) -> None:
 
         if self.enable:
+            detections_image_msg = msg
+            header = msg.header
 
             # convert image + predict
             cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
@@ -335,66 +225,101 @@ class YoloNode(LifecycleNode):
                 imgsz=(self.imgsz_height, self.imgsz_width),
                 half=self.half,
                 max_det=self.max_det,
-                augment=self.augment,
                 agnostic_nms=self.agnostic_nms,
                 retina_masks=self.retina_masks,
-                device=self.device,
+                show=self.image_show,
             )
             results: Results = results[0].cpu()
 
-            if results.boxes or results.obb:
-                hypothesis = self.parse_hypothesis(results)
-                boxes = self.parse_boxes(results)
-
-            if results.masks:
-                masks = self.parse_masks(results)
-
-            if results.keypoints:
-                keypoints = self.parse_keypoints(results)
-
             # create detection msgs
-            detections_msg = DetectionArray()
+            detections_bboxes_msg = Detection2DArray()
+            detections_keypoints_msg = KeyPointArray()
+            # detections_masks_msg = MaskArray()
+
+            detections_bboxes_msg.header = header
+            detections_keypoints_msg.header = header
+            # detections_masks_msg.header = header
 
             for i in range(len(results)):
 
-                aux_msg = Detection()
+                bbox = Detection2D()
+                kp = KeyPoint()
+                # ms = Mask()
 
-                if results.boxes or results.obb and hypothesis and boxes:
-                    aux_msg.class_id = hypothesis[i]["class_id"]
-                    aux_msg.class_name = hypothesis[i]["class_name"]
-                    aux_msg.score = hypothesis[i]["score"]
+                bbox.header = header
+                bbox.results = []
+                kp.key_names = []
+                kp.key_points = []
+                ohwp = ObjectHypothesisWithPose()
+                if results.boxes or results.obb:
+                    if results.boxes:
+                        box = results.boxes[i].xywh[0]
 
-                    aux_msg.bbox = boxes[i]
+                        ohwp.hypothesis.class_id = str(self.yolo.names[int(results.boxes[i].cls)])
+                        ohwp.hypothesis.score = float(results.boxes[i].conf)
+                        bbox.bbox.center.theta = 0.0
+                    
+                    else:
+                        box = results.obb.xywhr[i]
 
-                if results.masks and masks:
-                    aux_msg.mask = masks[i]
+                        ohwp.hypothesis.class_id = str(self.yolo.names[int(results.obb.cls[i])])
+                        ohwp.hypothesis.score = float(results.obb.conf[i])
+                        bbox.bbox.center.theta = float(box[4])
 
-                if results.keypoints and keypoints:
-                    aux_msg.keypoints = keypoints[i]
 
-                detections_msg.detections.append(aux_msg)
+                    ohwp.pose.pose.position = Point(x=float(box[0]), y=float(box[1]), z=-1)
+                    ohwp.pose.pose.orientation = Quaternion(x=0, y=0, z=0, w=1)
+                    ohwp.pose.covariance = [float(0)]*36
+                    bbox.results += [ohwp]
+                    bbox.bbox.center.position.x = float(box[0])
+                    bbox.bbox.center.position.y = float(box[1])
+                    bbox.bbox.size_x = float(box[2])
+                    bbox.bbox.size_y = float(box[3])
+                    detections_bboxes_msg.detections += [bbox]
+
+
+                if results.keypoints:
+                    if results.keypoints[i].conf is None:
+                        continue
+                    for kp_id, (p, conf) in enumerate(zip(results.keypoints[i].xy[0], results.keypoints[i].conf[0])):
+                        if conf >= self.threshold:
+                            kp.key_names += [str(kp_id + 1)]
+                            kp.key_points += [Point(x=float(p[0]), y=float(p[1]), z=-1)]
+                            # kp.key_conf += [float(conf)]
+                    detections_keypoints_msg.key_points_array += [kp]
+
+
+                # if results.masks:
+                #     def create_point2d(x: float, y: float) -> Point2D:
+                #         p = Point2D()
+                #         p.x = x
+                #         p.y = y
+                #         return p
+
+                #     ms.data = [
+                #         create_point2d(float(ele[0]), float(ele[1]))
+                #         for ele in results.masks[i].xy[0].tolist()
+                #     ]
+                #     ms.height = results.orig_img.shape[0]
+                #     ms.width = results.orig_img.shape[1]
+                #     detections_masks_msg.data = [ms]
+
 
             # publish detections
-            detections_msg.header = msg.header
-            self._pub.publish(detections_msg)
+            self._pub_rect.publish(detections_bboxes_msg)
+            self._pub_keypoint.publish(detections_keypoints_msg)
+            # self._pub_mask.publish(detections_masks_msg)
+            self._pub_img.publish(detections_image_msg)
 
             del results
             del cv_image
-
-    def set_classes_cb(
-        self, req: SetClasses.Request, res: SetClasses.Response
-    ) -> SetClasses.Response:
-        self.get_logger().info(f"Setting classes: {req.classes}")
-        self.yolo.set_classes(req.classes)
-        self.get_logger().info(f"New classes: {self.yolo.names}")
-        return res
 
 
 def main():
     rclpy.init()
     node = YoloNode()
-    node.trigger_configure()
-    node.trigger_activate()
+    node.trigger_configure()  # ノードを構造する
+    node.trigger_activate()   # ノードをアクティブにする
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
