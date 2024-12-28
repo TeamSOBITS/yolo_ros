@@ -35,9 +35,14 @@ def generate_launch_description():
     weight_file = LaunchConfiguration("weight_file")
     weight_file_cmd = DeclareLaunchArgument(
         "weight_file", description="weight file path",
-        default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "test.pt")
-        # default_value="yolov8m.pt"
-        # default_value="yolov10m.pt"
+        default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "test.pt"),  ## custom weight file
+        # default_value="yolov5mu.pt",         ## YOLOv5
+        # default_value="yolov8m.pt",          ## YOLOv8
+        # default_value="yolov9c.pt",          ## YOLOv9
+        # default_value="yolov10m.pt",         ## YOLOv10
+        # default_value="yolov11m.pt",         ## YOLOv11
+        # default_value="yolo_nas_s.pt",       ## YOLO NAS
+        # default_value="yolov8s-worldv2.pt",  ## YOLO World
     )
 
     init_prediction = LaunchConfiguration("init_prediction")
@@ -48,8 +53,16 @@ def generate_launch_description():
     image_topic_name = LaunchConfiguration("image_topic_name")
     image_topic_name_cmd = DeclareLaunchArgument(
         "image_topic_name",
-        default_value="/camera/camera/color/image_raw",
         description="ROS Topic Name of sensor_msgs/msg/Image message",
+        default_value="/camera/camera/color/image_raw",   ## realsense
+        # default_value="/rgb/image_raw",                   ## azure_kinect
+    )
+
+    image_show = LaunchConfiguration("image_show")
+    image_show_cmd = DeclareLaunchArgument(
+        "image_show",
+        default_value="False",
+        description="image show flag",
     )
 
     threshold = LaunchConfiguration("threshold")
@@ -102,13 +115,6 @@ def generate_launch_description():
         "retina_masks",
         default_value="False",
         description="Whether to use high-resolution segmentation masks if available in the model, enhancing mask quality for segmentation",
-    )
-
-    image_show = LaunchConfiguration("image_show")
-    image_show_cmd = DeclareLaunchArgument(
-        "image_show",
-        default_value="False",
-        description="image show flag",
     )
 
     namespace = LaunchConfiguration("namespace")
