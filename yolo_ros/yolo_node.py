@@ -256,6 +256,7 @@ class YoloNode(LifecycleNode):
                         ohwp.hypothesis.class_id = str(self.yolo.names[int(results.boxes[i].cls)])
                         ohwp.hypothesis.score = float(results.boxes[i].conf)
                         bbox.bbox.center.theta = 0.0
+                        bbox.id = str(self.yolo.names[int(results.boxes[i].cls)])
                     
                     else:
                         box = results.obb.xywhr[i]
@@ -263,6 +264,7 @@ class YoloNode(LifecycleNode):
                         ohwp.hypothesis.class_id = str(self.yolo.names[int(results.obb.cls[i])])
                         ohwp.hypothesis.score = float(results.obb.conf[i])
                         bbox.bbox.center.theta = float(box[4])
+                        bbox.id = str(self.yolo.names[int(results.obb.cls[i])])
 
 
                     ohwp.pose.pose.position = Point(x=float(box[0]), y=float(box[1]), z=float(-1))
