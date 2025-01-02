@@ -277,32 +277,48 @@ class YoloNode(LifecycleNode):
                     bbox.bbox.size_y = float(box[3])
                     detections_bboxes_msg.detections += [bbox]
 
-                    #generate result image
-                    # label = f"{bounding_box.Class} {bounding_box.probability:.2f}"
-                    # (w, h), baseline = cv2.getTextSize(label,
-                    #                         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                    #                         fontScale=0.5,
-                    #                         thickness=1)
+                    # generate result image
+                    label = f"{ohwp.hypothesis.class_id} {ohwp.hypothesis.score:.2f}"
+                    x_min = bbox.bbox.center.position.x - bbox.bbox.size_x/2
+                    y_min = bbox.bbox.center.position.y - bbox.bbox.size_y/2
+                    x_max = bbox.bbox.center.position.x + bbox.bbox.size_x/2
+                    y_max = bbox.bbox.center.position.y + bbox.bbox.size_y/2
+                    theta = bbox.bbox.center.theta
+                    (w, h), baseline = cv2.getTextSize(label,
+                                            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                                            fontScale=0.5,
+                                            thickness=1)
+                    # 回転矩形の頂点を計算
+                    rect = ((bbox.bbox.center.position.x, bbox.bbox.center.position.y), (bbox.bbox.size_x, bbox.bbox.size_y), bbox.bbox.center.theta)
+                    rec_box = cv2.boxPoints(rect)  # 頂点座標を取得
+                    rec_box = np.array(rec_box, dtype=np.int32) # 整数に変換
+                    # 回転矩形を描画（輪郭）
+                    cv2.polylines(cv_image,
+                                [rec_box],
+                                isClosed=True,
+                                color=colors(c, True),
+                                thickness=2,
+                                lineType=cv2.LINE_4)
                     # cv2.rectangle(cv_image,
-                    #             pt1=(int(box.xyxy[0][0]),int(box.xyxy[0][1])),
-                    #             pt2=(int(box.xyxy[0][2]),int(box.xyxy[0][3])),
+                    #             pt1=(int(x_min), int(y_min)),
+                    #             pt2=(int(x_max), int(y_max)),
                     #             color=colors(c, True),
                     #             thickness=2,
                     #             lineType=cv2.LINE_4)
-                    # cv2.rectangle(cv_image,
-                    #             pt1=(int(box.xyxy[0][0]), int(box.xyxy[0][1]) - h),
-                    #             pt2=(int(box.xyxy[0][0]) + w, int(box.xyxy[0][1])),
-                    #             color=colors(c, True),
-                    #             thickness=-1,
-                    #             lineType=cv2.LINE_4)
-                    # cv2.putText(cv_image,
-                    #             text=label,
-                    #             org=(int(box.xyxy[0][0]),int(box.xyxy[0][1])),
-                    #             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                    #             fontScale=0.5,
-                    #             color=(255,255,255),
-                    #             thickness=1,
-                    #             lineType=cv2.LINE_AA)
+                    cv2.rectangle(cv_image,
+                                pt1=(int(x_min), int(y_min) - h),
+                                pt2=(int(x_max) + w, int(y_max)),
+                                color=colors(c, True),
+                                thickness=-1,
+                                lineType=cv2.LINE_4)
+                    cv2.putText(cv_image,
+                                text=label,
+                                org=(int(x_min), int(y_min)),
+                                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                                fontScale=0.5,
+                                color=(255,255,255),
+                                thickness=1,
+                                lineType=cv2.LINE_AA)
 
                 if results.keypoints:
                     if results.keypoints[i].conf is None:
