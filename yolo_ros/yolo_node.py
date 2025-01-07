@@ -17,6 +17,7 @@
 import cv2
 from typing import List, Dict
 from cv_bridge import CvBridge
+import numpy as np
 
 import rclpy
 from rclpy.qos import QoSProfile
@@ -33,6 +34,7 @@ from ultralytics.engine.results import Results
 from ultralytics.engine.results import Boxes
 from ultralytics.engine.results import Masks
 from ultralytics.engine.results import Keypoints
+from ultralytics.utils.plotting import colors
 
 from geometry_msgs.msg import Point
 from geometry_msgs.msg import Quaternion
@@ -257,6 +259,7 @@ class YoloNode(LifecycleNode):
                         ohwp.hypothesis.score = float(results.boxes[i].conf)
                         bbox.bbox.center.theta = 0.0
                         bbox.id = str(self.yolo.names[int(results.boxes[i].cls)])
+                        c = int(results.boxes[i].cls[0])
                     
                     else:
                         box = results.obb.xywhr[i]
@@ -265,6 +268,7 @@ class YoloNode(LifecycleNode):
                         ohwp.hypothesis.score = float(results.obb.conf[i])
                         bbox.bbox.center.theta = float(box[4])
                         bbox.id = str(self.yolo.names[int(results.obb.cls[i])])
+                        c = int(results.obb.cls[i])
 
 
                     ohwp.pose.pose.position = Point(x=float(box[0]), y=float(box[1]), z=float(-1))
@@ -296,7 +300,7 @@ class YoloNode(LifecycleNode):
                     cv2.polylines(cv_image,
                                 [rec_box],
                                 isClosed=True,
-                                color=colors(c, True),
+                                color=colors(c, False),
                                 thickness=2,
                                 lineType=cv2.LINE_4)
                     # cv2.rectangle(cv_image,
@@ -307,7 +311,7 @@ class YoloNode(LifecycleNode):
                     #             lineType=cv2.LINE_4)
                     cv2.rectangle(cv_image,
                                 pt1=(int(x_min), int(y_min) - h),
-                                pt2=(int(x_max) + w, int(y_max)),
+                                pt2=(int(x_min) + w, int(y_min)),
                                 color=colors(c, True),
                                 thickness=-1,
                                 lineType=cv2.LINE_4)
@@ -347,7 +351,8 @@ class YoloNode(LifecycleNode):
                 #     detections_masks_msg.data = [ms]
 
 
-            detections_image_msg = self.bridge.cv2_to_imgmsg(cv_image, "bgr8")
+            detections_image_msg = self.cv_bridge.cv2_to_imgmsg(cv_image, "rgb8")
+            detections_image_msg.header = header
 
             # publish detections
             self._pub_rect.publish(detections_bboxes_msg)

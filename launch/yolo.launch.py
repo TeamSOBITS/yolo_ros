@@ -16,13 +16,30 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription, LaunchContext
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
 
 
 def generate_launch_description():
+
+    image_topic_name = LaunchConfiguration("image_topic_name")
+    image_topic_name_cmd = DeclareLaunchArgument(
+        "image_topic_name",
+        description="ROS Topic Name of sensor_msgs/msg/Image message",
+        # default_value="/camera/camera/color/image_raw",   ## realsense
+        default_value="/rgb/image_raw",                   ## azure_kinect
+    )
+
+    point_cloud_topic = LaunchConfiguration("point_cloud_topic")
+    point_cloud_topic_cmd = DeclareLaunchArgument(
+        "point_cloud_topic",
+        description="ROS Topic Name of sensor_msgs/msg/PointCloud2 message",
+        # default_value="/camera/camera/depth/color/points",   ## realsense
+        default_value="/points2",                            ## azure_kinect
+    )
 
     model_type = LaunchConfiguration("model_type")
     model_type_cmd = DeclareLaunchArgument(
@@ -35,27 +52,19 @@ def generate_launch_description():
     weight_file = LaunchConfiguration("weight_file")
     weight_file_cmd = DeclareLaunchArgument(
         "weight_file", description="weight file path",
-        default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "test.pt"),  ## custom weight file
-        # default_value="yolov5mu.pt",         ## YOLOv5
-        # default_value="yolov8m.pt",          ## YOLOv8
-        # default_value="yolov9c.pt",          ## YOLOv9
-        # default_value="yolov10m.pt",         ## YOLOv10
-        # default_value="yolov11m.pt",         ## YOLOv11
-        # default_value="yolo_nas_s.pt",       ## YOLO NAS
-        # default_value="yolov8s-worldv2.pt",  ## YOLO World
+        default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),  ## custom weight file
+        # default_value="/yolov5mu.pt",         ## YOLOv5
+        # default_value="/yolov8m.pt",          ## YOLOv8
+        # default_value="/yolov9c.pt",          ## YOLOv9
+        # default_value="/yolov10m.pt",         ## YOLOv10
+        # default_value="/yolov11m.pt",         ## YOLOv11
+        # default_value="/yolo_nas_s.pt",       ## YOLO NAS
+        # default_value="/yolov8s-worldv2.pt",  ## YOLO World
     )
 
     init_prediction = LaunchConfiguration("init_prediction")
     init_prediction_cmd = DeclareLaunchArgument(
         "init_prediction", default_value="True", description="Whether to start YOLO enabled"
-    )
-
-    image_topic_name = LaunchConfiguration("image_topic_name")
-    image_topic_name_cmd = DeclareLaunchArgument(
-        "image_topic_name",
-        description="ROS Topic Name of sensor_msgs/msg/Image message",
-        default_value="/camera/camera/color/image_raw",   ## realsense
-        # default_value="/rgb/image_raw",                   ## azure_kinect
     )
 
     image_show = LaunchConfiguration("image_show")
@@ -156,7 +165,26 @@ def generate_launch_description():
 
     use_3d = LaunchConfiguration("use_3d")
     use_3d_cmd = DeclareLaunchArgument(
-        "use_3d", default_value="False", description="Whether to activate 3D detections"
+        "use_3d", default_value="True", description="Whether to activate 3D detections"
+    )
+
+    bbox_to_3d_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("image_to_position"),
+                "launch",
+                "bbox_to_3d.launch.py",
+            )
+        ),
+        launch_arguments={
+            "namespace": namespace,
+            "base_frame_name": "camera_base",
+            "bbox_topic_name": "/yolo_ros/object_boxes",
+            "cloud_topic_name": point_cloud_topic,
+            "img_topic_name": image_topic_name,
+            "execute_default": init_prediction,
+        }.items(),
+        condition=IfCondition(use_3d),  # use_3dがTrueのときのみ実行
     )
 
     return LaunchDescription(
@@ -166,6 +194,7 @@ def generate_launch_description():
             weight_file_cmd,
             init_prediction_cmd,
             image_topic_name_cmd,
+            point_cloud_topic_cmd,
             threshold_cmd,
             iou_cmd,
             imgsz_height_cmd,
@@ -177,5 +206,6 @@ def generate_launch_description():
             image_show_cmd,
             namespace_cmd,
             yolo_node_cmd,
+            bbox_to_3d_cmd,
         ]
     )
