@@ -30,7 +30,8 @@ def generate_launch_description():
         "image_topic_name",
         description="ROS Topic Name of sensor_msgs/msg/Image message",
         # default_value="/camera/camera/color/image_raw",   ## realsense
-        default_value="/rgb/image_raw",                   ## azure_kinect
+        # default_value="/rgb/image_raw",                   ## azure_kinect
+        default_value="/camera/color/image_raw",          ## orbbec_series
     )
 
     point_cloud_topic = LaunchConfiguration("point_cloud_topic")
@@ -38,7 +39,8 @@ def generate_launch_description():
         "point_cloud_topic",
         description="ROS Topic Name of sensor_msgs/msg/PointCloud2 message",
         # default_value="/camera/camera/depth/color/points",   ## realsense
-        default_value="/points2",                            ## azure_kinect
+        # default_value="/points2",                            ## azure_kinect
+        default_value="/camera/depth_registered/points",     ## orbbec_series
     )
 
     model_type = LaunchConfiguration("model_type")
@@ -60,6 +62,7 @@ def generate_launch_description():
         # default_value="/yolov11m.pt",         ## YOLOv11
         # default_value="/yolo_nas_s.pt",       ## YOLO NAS
         # default_value="/yolov8s-worldv2.pt",  ## YOLO World
+        # default_value="/yolo11n-pose.pt",     ## KeyPoint weight file of YOLO11
     )
 
     init_prediction = LaunchConfiguration("init_prediction")
@@ -137,6 +140,12 @@ def generate_launch_description():
         "class_list.yaml"
         )
 
+    keypoint_dictionary = os.path.join(
+        get_package_share_directory("yolo_ros"),
+        "keypoints",
+        "key_point_dictionary.yaml"
+        )
+
     yolo_node_cmd = Node(
         package="yolo_ros",
         executable="yolo_node",
@@ -158,7 +167,8 @@ def generate_launch_description():
                 "retina_masks": retina_masks,
                 "image_show": image_show,
             },
-            class_list
+            class_list,
+            keypoint_dictionary,
         ],
         output="screen"
     )
@@ -178,11 +188,37 @@ def generate_launch_description():
         ),
         launch_arguments={
             "namespace": namespace,
-            "base_frame_name": "camera_base",
+            "base_frame_name": "base_footprint",
             "bbox_topic_name": "/yolo_ros/object_boxes",
             "cloud_topic_name": point_cloud_topic,
             "img_topic_name": image_topic_name,
             "execute_default": init_prediction,
+            "cluster_tolerance": "0.01",
+            "min_clusterSize": "100",
+            "max_clusterSize": "20000",
+            "noise_point_cloud_range": "0.01",
+            "fast_shot": "true",
+            "enable_id": "false",
+        }.items(),
+        condition=IfCondition(use_3d),  # use_3dがTrueのときのみ実行
+    )
+
+    keypoint_to_3d_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("image_to_position"),
+                "launch",
+                "keypoint_to_3d.launch.py",
+            )
+        ),
+        launch_arguments={
+            "namespace": namespace,
+            "base_frame_name": "base_footprint",
+            "keypoints_topic_name": "/yolo_ros/object_keypoints",
+            "cloud_topic_name": point_cloud_topic,
+            "img_topic_name": image_topic_name,
+            "execute_default": init_prediction,
+            "enable_id": "true",
         }.items(),
         condition=IfCondition(use_3d),  # use_3dがTrueのときのみ実行
     )
@@ -207,5 +243,6 @@ def generate_launch_description():
             namespace_cmd,
             yolo_node_cmd,
             bbox_to_3d_cmd,
+            keypoint_to_3d_cmd,
         ]
     )
