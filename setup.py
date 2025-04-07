@@ -14,6 +14,7 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'weights'), glob('weights/*')),
         (os.path.join('share', package_name, 'yolo_world_classes'), glob('yolo_world_classes/*')),
+        (os.path.join('share', package_name, 'keypoints'), glob('keypoints/*')),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

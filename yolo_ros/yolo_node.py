@@ -62,6 +62,7 @@ class YoloNode(LifecycleNode):
 
         self.declare_parameter("init_prediction", True)
         self.declare_parameter("classes", [""])
+        self.declare_parameter("keypoint_name_list", [""])
         self.type_to_model = {"YOLO": YOLO, "NAS": NAS, "World": YOLOWorld}
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
@@ -109,6 +110,8 @@ class YoloNode(LifecycleNode):
             "init_prediction").get_parameter_value().bool_value
         self.classes = self.get_parameter(
             "classes").get_parameter_value().string_array_value
+        self.keypoint_name_list = self.get_parameter(
+            "keypoint_name_list").get_parameter_value().string_array_value
         # detection pub
         self.image_qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -118,10 +121,11 @@ class YoloNode(LifecycleNode):
         )
 
         self._pub_rect = self.create_lifecycle_publisher(
-            Detection2DArray, "object_boxes", 1)
+            Detection2DArray, "object_boxes"    , 1)
         self._pub_keypoint = self.create_lifecycle_publisher(
-            KeyPointArray, "object_keypoints", 1)
-        # self._pub_mask     = self.create_lifecycle_publisher(MaskArray       , "object_masks"    , 1)
+            KeyPointArray   , "object_keypoints", 1)
+        # self._pub_mask     = self.create_lifecycle_publisher(
+        #     MaskArray       , "object_masks"    , 1)
         self._pub_img = self.create_lifecycle_publisher(
             Image, "detect_image", 1)
         self.cv_bridge = CvBridge()
@@ -297,7 +301,7 @@ class YoloNode(LifecycleNode):
                     continue
                 for kp_id, (p, conf) in enumerate(zip(results.keypoints[i].xy[0], results.keypoints[i].conf[0])):
                     if conf >= self.threshold:
-                        kp.key_names += [str(kp_id + 1)]
+                        kp.key_names += [str(self.keypoint_name_list[kp_id])]
                         kp.key_points += [Point(x=float(p[0]), y=float(p[1]), z=float(-1))]
                 detections_keypoints_msg.key_points_array += [kp]
 
