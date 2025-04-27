@@ -215,13 +215,27 @@ class YoloNode(LifecycleNode):
         encoding = msg.encoding
         cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
 
+        # if encoding == 'bgr8':
+        #     cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+        # elif encoding == 'bgra8':
+        #     cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
+        # elif encoding == 'rgba8':
+        #     cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
+        # elif encoding != 'rgb8':
+        #     self.get_logger().error(f"Unsupported encoding: {encoding}")
+        #     return
         if encoding == 'bgr8':
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            cv_image_out = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
         elif encoding == 'bgra8':
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
+            cv_image_out = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
+            cv_image     = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
         elif encoding == 'rgba8':
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
-        elif encoding != 'rgb8':
+            cv_image_out = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
+            cv_image     = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
+        elif encoding == 'rgb8':
+            cv_image_out = cv_image
+            cv_image     = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+        else:
             self.get_logger().error(f"Unsupported encoding: {encoding}")
             return
         
@@ -288,12 +302,12 @@ class YoloNode(LifecycleNode):
                         (bbox.bbox.size_x, bbox.bbox.size_y), bbox.bbox.center.theta)
                 rec_box = cv2.boxPoints(rect)
                 rec_box = np.array(rec_box, dtype=np.int32)
-                cv2.polylines(cv_image, [rec_box], isClosed=True, color=colors(c, False), thickness=2)
+                cv2.polylines(cv_image_out, [rec_box], isClosed=True, color=colors(c, False), thickness=2)
 
-                cv2.rectangle(cv_image, pt1=(int(x_min), int(y_min) - h), pt2=(int(x_min) + w, int(y_min)),
+                cv2.rectangle(cv_image_out, pt1=(int(x_min), int(y_min) - h), pt2=(int(x_min) + w, int(y_min)),
                             color=colors(c, True), thickness=-1)
 
-                cv2.putText(cv_image, text=label, org=(int(x_min), int(y_min)), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                cv2.putText(cv_image_out, text=label, org=(int(x_min), int(y_min)), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                             fontScale=0.5, color=(255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
 
             if results.keypoints:
@@ -305,7 +319,7 @@ class YoloNode(LifecycleNode):
                         kp.key_points += [Point(x=float(p[0]), y=float(p[1]), z=float(-1))]
                 detections_keypoints_msg.key_points_array += [kp]
 
-        ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image, "rgb8")
+        ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image_out, "rgb8")
         ros_image.header = header
 
         self._pub_rect.publish(detections_bboxes_msg)
@@ -314,6 +328,7 @@ class YoloNode(LifecycleNode):
 
         del results
         del cv_image
+        del cv_image_out
 
 
 def main():
