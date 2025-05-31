@@ -12,7 +12,7 @@
 5. [パラメーター](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#パラメーター)
 
 ## 概要
-yolo_rosは、UltralyticsのYOLOモデル（YOLOv3からYOLOv11、YOLO-NAS、YOLO-Worldなど）をROS 2で利用するためのラッパーです。これにより、以下の機能がROS 2環境で実現できます。
+yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOLO-Worldなど）をROS 2で利用するためのラッパーです．これにより，以下の機能がROS 2環境で実現できます．
 
 - 物体検出 (Object Detection)
 - トラッキング (Tracking)
@@ -73,21 +73,21 @@ yolo_rosは、UltralyticsのYOLOモデル（YOLOv3からYOLOv11、YOLO-NAS、YOL
 
 <!-- 実行・操作方法 -->
 ## 実行・操作方法
-1. カメラを起動し、[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える。
+1. カメラを起動し，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える．
    
    例
    ```sh
    default_value="/camera/color/image_raw",          ## orbbec_series
    ```
-2. RGBDカメラを使用する場合は、[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**point_cloud_topic**も使用するカメラの点群のトピック名に書き換える。
+2. RGBDカメラを使用する場合は，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**point_cloud_topic**も使用するカメラの点群のトピック名に書き換える．
    
    例
    ```sh
    default_value="/camera/depth_registered/points",     ## orbbec_series
    ```. 
 3. ウェイトファイルを設定\
-    用意したウェイトファイルを[weightsディレクトリ](https://github.com/TeamSOBITS/yolo_ros/tree/humble-devel/weights)に入れる。
-4. [yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**weight_file**を、手順3で設定したウェイトファイル名に書き換える。
+    用意したウェイトファイルを[weightsディレクトリ](https://github.com/TeamSOBITS/yolo_ros/tree/humble-devel/weights)に入れる．
+4. [yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**weight_file**を，手順3で設定したウェイトファイル名に書き換える．
    ```sh
    default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),  ## custom weight file
    ```
@@ -104,8 +104,8 @@ yolo_rosは、UltralyticsのYOLOモデル（YOLOv3からYOLOv11、YOLO-NAS、YOL
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 ## パラメーター
-以下は[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)で設定できるパラメーターである。
-詳細は[Ultralytics page](https://docs.ultralytics.com/modes/predict/#inference-arguments)で確認できる。
+以下は[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)で設定できるパラメーターである．
+詳細は[Ultralytics page](https://docs.ultralytics.com/modes/predict/#inference-arguments)で確認できる．
 
 | パラメーター名  | 説明 | デフォルト値 |
 | ------------- | ------------- | ------------- |
@@ -120,19 +120,19 @@ yolo_rosは、UltralyticsのYOLOモデル（YOLOv3からYOLOv11、YOLO-NAS、YOL
 | agnostic_nms | クラスに依存しないNMSを有効にするか | False |
 | retina_masks | 高解像度セグメンテーションマスクを使用するか | False |
 | use_3d | 3D検出を有効にするか | True |
-| cluster_tolerance |  | 0.01 |
-| min_clusterSize |  | 100 |
-| max_clusterSize |  | 20000 |
-| noise_point_cloud_range |  | 0.01 |
+| cluster_tolerance | どの程度離れた点群までは同一の物体とみなすかのしきい値．BoundingBox内に点群を飛ばした場合に，対象物に点群があたり，しきい値いないにある点群を1物体とみなしクラス分けを行います． そのため，あまり大きくすると点群1つ1つの探索範囲が広がり処理が遅くなってしまいます． | 0.01 |
+| min_clusterSize | どの程度の数以下の点群の集まりは対象物の点群から棄却するかのしきい値．点群をクラス分けした際に，この数以下の点群数だったらノイズとみなし棄却します． | 100 |
+| max_clusterSize | どの程度の数以上の点群の集まりは対象物の点群から棄却するかのしきい値．点群をクラス分けした際に，この数以上の点群数だったら全く別の対象物(物体だったら床の点群など)を捉えてしまったとみなし棄却します． | 20000 |
+| noise_point_cloud_range | 対象の物体の点群からノイズ面を除去し，中心座標に近づけるため除去量．クラス分けした点群から物体を抽出した後，床や背後の壁，左右の壁などx,y,z方向に点群をこの値分，更にカットします． こうすることで，より物体の部分のみにかかる点群に絞ることができます． しかし値を大きくしすぎると，物体分の点群まで多く削いでしまうため注意が必用です． | 0.01 |
 | fast_shot | fast_shotを有効にするかどうか(bboxが大きいときに検出速度が上昇) | true |
 | enable_id | 検出した物体のラベルの後ろにIDをつけるかどうか(例:apple_01) | false |
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 ## ライフサイクルノード (Lifecycle Nodes)
-yolo_rosのすべてのノードはライフサイクルノードをサポートしています。これにより、未設定 (unconfigured) および非アクティブ (inactive) 状態での負荷を軽減し、アクティブ (active) 状態でのみモデルのロードとサブスクライバーのアクティブ化を行います。
+yolo_rosのすべてのノードはライフサイクルノードをサポートしています．これにより，未設定 (unconfigured) および非アクティブ (inactive) 状態での負荷を軽減し，アクティブ (active) 状態でのみモデルのロードとサブスクライバーのアクティブ化を行います．
 
-状態ごとのリソース比較 (yolov8m.ptモデル、30fpsビデオストリーム)
+状態ごとのリソース比較 (yolov8m.ptモデル，30fpsビデオストリーム)
 
 | State    | CPU Usage (i7 12th Gen) | VRAM Usage | Bandwidth Usage |
 | -------- | ----------------------- | ---------- | --------------- |
