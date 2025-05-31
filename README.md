@@ -1,44 +1,29 @@
+<a name="readme-top"></a>
+
+[JP](README.md) | [EN](README_en.md)
+
 # yolo_ros
 
-ROS 2 wrap for YOLO models from [Ultralytics](https://github.com/ultralytics/ultralytics) to perform object detection and tracking, instance segmentation, human pose estimation and Oriented Bounding Box (OBB). There are also 3D versions of object detection, including instance segmentation, and human pose estimation based on depth images.
+目次
+1. [概要](##概要)
+2. [対応モデル](##対応モデル)
+3. [セットアップ](##セットアップ)
+4. [実行・操作方法](##実行・操作方法)
+5. [パラメーター](##パラメーター)
 
-## Table of Contents
+## 概要
+yolo_rosは、UltralyticsのYOLOモデル（YOLOv3からYOLOv11、YOLO-NAS、YOLO-Worldなど）をROS 2で利用するためのラッパーです。これにより、以下の機能がROS 2環境で実現できます。
 
-1. [Installation](#installation)
-2. [Docker](#docker)
-3. [Models](#models)
-4. [Usage](#usage)
-5. [Demos](#demos)
+- 物体検出 (Object Detection)
+- トラッキング (Tracking)
+- インスタンスセグメンテーション (Instance Segmentation)
+- 人間の姿勢推定 (Human Pose Estimation)
+- Oriented Bounding Box (OBB)
+- 3D物体検出 (3D Object Detection)：深度画像を使用して3Dバウンディングボックスを生成
+- 3Dインスタンスセグメンテーション (3D Instance Segmentation)：深度画像とインスタンスマスクを使用
+- 3D人間の姿勢推定 (3D Human Pose Estimation)：深度画像とキーポイントを使用
 
-## Installation
-
-```shell
-cd ~/ros2_ws/src
-git clone https://github.com/mgonzs13/yolo_ros.git
-pip3 install -r yolo_ros/requirements.txt
-cd ~/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
-colcon build
-```
-
-## Docker
-
-Build the yolo_ros docker.
-
-```shell
-docker build -t yolo_ros .
-```
-
-Run the docker container. If you want to use CUDA, you have to install the [NVIDIA Container Tollkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) and add `--gpus all`.
-
-```shell
-docker run -it --rm --gpus all yolo_ros
-```
-
-## Models
-
-The compatible models for yolo_ros are the following:
-
+## 対応モデル
 - [YOLOv3](https://docs.ultralytics.com/models/yolov3/)
 - [YOLOv4](https://docs.ultralytics.com/models/yolov4/)
 - [YOLOv5](https://docs.ultralytics.com/models/yolov5/)
@@ -51,67 +36,85 @@ The compatible models for yolo_ros are the following:
 - [YOLO-NAS](https://docs.ultralytics.com/models/yolo-nas/)
 - [YOLO-World](https://docs.ultralytics.com/models/yolo-world/)
 
-## Usage
+## セットアップ
+本レポジトリのセットアップ方法について説明します．
 
-<details>
-<summary>Click to expand</summary>
+### 環境条件
 
-### YOLOv5
+| System  | Version |
+| ------------- | ------------- |
+| Ubuntu | 22.04 (Jammy Jellyfish) |
+| ROS | Humble Hawksbill |
+| Python | 3.0~ |
 
-```shell
-ros2 launch yolo_bringup yolov5.launch.py
-```
+### インストール方法
+1. ROS2の`src`フォルダに移動します．
+   ```sh
+   cd　~/colcon_ws/src/
+   ```
+2. 本レポジトリをcloneします．
+   ```sh
+   git clone -b humble-devel https://github.com/TeamSOBITS/yolo_ros.git
+   ```
+3. レポジトリの中へ移動します．
+   ```sh
+   cd yolo_ros
+   ```
+4. 依存パッケージをインストールします．
+    ```sh
+    bash install.sh
+    ```
+5. パッケージをコンパイルします．
+   ```sh
+   cd ~/colcon_ws/
+   colcon build --symlink-install
+   ```
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
-### YOLOv8
 
-```shell
-ros2 launch yolo_bringup yolov8.launch.py
-```
+<!-- 実行・操作方法 -->
+## 実行・操作方法
+1. カメラを起動し、[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える。
+   
+   例
+   ```sh
+   default_value="/camera/color/image_raw",          ## orbbec_series
+   ```
+2. RGBDカメラを使用する場合は、[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**point_cloud_topic**も使用するカメラの点群のトピック名に書き換える。
+   
+   例
+   ```sh
+   default_value="/camera/depth_registered/points",     ## orbbec_series
+   ```. 
+3. ウェイトファイルを設定\
+    用意したウェイトファイルを[weightsディレクトリ](https://github.com/TeamSOBITS/yolo_ros/tree/humble-devel/weights)に入れる。
+4. [yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**weight_file**を、手順3で設定したウェイトファイル名に書き換える。
+   ```sh
+   default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),  ## custom weight file
+   ```
+5. colcon buildを実行
+   ```sh
+   cd ~/colcon_ws/
+   colcon build --symlink-install
+   ```
+6. yoloを起動
+    ```sh
+    ros2 launch yolo_ros yolo.launch.py
+    ```
 
-### YOLOv9
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
-```shell
-ros2 launch yolo_bringup yolov9.launch.py
-```
-
-### YOLOv10
-
-```shell
-ros2 launch yolo_bringup yolov10.launch.py
-```
-
-### YOLOv11
-
-```shell
-ros2 launch yolo_bringup yolov11.launch.py
-```
-
-### YOLO-NAS
-
-```shell
-ros2 launch yolo_bringup yolo-nas.launch.py
-```
-
-### YOLO-World
-
-```shell
-ros2 launch yolo_bringup yolo-world.launch.py
-```
-
-</details>
-
-<p align="center">
-  <img src="./docs/rqt_graph_yolov8.png" width="100%" />
-</p>
-
-### Topics
-
-- **/yolo/detections**: Objects detected by YOLO using the RGB images. Each object contains a bounding box and a class name. It may also include a mark or a list of keypoints.
-- **/yolo/tracking**: Objects detected and tracked from YOLO results. Each object is assigned a tracking ID.
-- **/yolo/detections_3d**: 3D objects detected. YOLO results are used to crop the depth images to create the 3D bounding boxes and 3D keypoints.
-- **/yolo/debug_image**: Debug images showing the detected and tracked objects. They can be visualized with rviz2.
-
-### Parameters
+## パラメーター
+- init_prediction
+- image_show
+- threshold
+  - 検出閾値
+- iou
+  - 非最大抑制 (NMS) のためのIoU閾値
+- use_3d
+  - 3D検出を有効にするか
+- fast_shot
+- enable_id
 
 These are the parameters from the [yolo.launch.py](./yolo_bringup/launch/yolo.launch.py), used to launch all models. Check out the [Ultralytics page](https://docs.ultralytics.com/modes/predict/#inference-arguments) for more details.
 
@@ -154,25 +157,11 @@ These are some resource comparisons using the default yolov8m.pt model on a 30fp
 | Active   | 40-50% in one core      | 628 MB     | Up to 200 Mbps  |
 | Inactive | ~5-7% in one core       | 338 MB     | 0-20 Kbps       |
 
-### YOLO 3D
-
-```shell
-ros2 launch yolo_bringup yolov8.launch.py use_3d:=True
-```
-
-<p align="center">
-  <img src="./docs/rqt_graph_yolov8_3d.png" width="100%" />
-</p>
-
 ## Demos
 
 ## Object Detection
 
 This is the standard behavior of yolo_ros which includes object tracking.
-
-```shell
-ros2 launch yolo_bringup yolo.launch.py
-```
 
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1gTQt6soSIq1g2QmK7locHDiZ-8MqVl2w)](https://drive.google.com/file/d/1gTQt6soSIq1g2QmK7locHDiZ-8MqVl2w/view?usp=sharing)
 
@@ -180,19 +169,11 @@ ros2 launch yolo_bringup yolo.launch.py
 
 Instance masks are the borders of the detected objects, not all the pixels inside the masks.
 
-```shell
-ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-seg.pt
-```
-
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1dwArjDLSNkuOGIB0nSzZR6ABIOCJhAFq)](https://drive.google.com/file/d/1dwArjDLSNkuOGIB0nSzZR6ABIOCJhAFq/view?usp=sharing)
 
 ## Human Pose
 
 Online persons are detected along with their keypoints.
-
-```shell
-ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-pose.pt
-```
 
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1pRy9lLSXiFEVFpcbesMCzmTMEoUXGWgr)](https://drive.google.com/file/d/1pRy9lLSXiFEVFpcbesMCzmTMEoUXGWgr/view?usp=sharing)
 
@@ -200,28 +181,16 @@ ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-pose.pt
 
 The 3D bounding boxes are calculated by filtering the depth image data from an RGB-D camera using the 2D bounding box. Only objects with a 3D bounding box are visualized in the 2D image.
 
-```shell
-ros2 launch yolo_bringup yolo.launch.py use_3d:=True
-```
-
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1ZcN_u9RB9_JKq37mdtpzXx3b44tlU-pr)](https://drive.google.com/file/d/1ZcN_u9RB9_JKq37mdtpzXx3b44tlU-pr/view?usp=sharing)
 
 ## 3D Object Detection (Using Instance Segmentation Masks)
 
 In this, the depth image data is filtered using the max and min values obtained from the instance masks. Only objects with a 3D bounding box are visualized in the 2D image.
 
-```shell
-ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-seg.pt use_3d:=True
-```
-
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1wVZgi5GLkAYxv3GmTxX5z-vB8RQdwqLP)](https://drive.google.com/file/d/1wVZgi5GLkAYxv3GmTxX5z-vB8RQdwqLP/view?usp=sharing)
 
 ## 3D Human Pose
 
 Each keypoint is projected in the depth image and visualized using purple spheres. Only objects with a 3D bounding box are visualized in the 2D image.
-
-```shell
-ros2 launch yolo_bringup yolo.launch.py model:=yolov8m-pose.pt use_3d:=True
-```
 
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1j4VjCAsOCx_mtM2KFPOLkpJogM0t227r)](https://drive.google.com/file/d/1j4VjCAsOCx_mtM2KFPOLkpJogM0t227r/view?usp=sharing)
