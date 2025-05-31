@@ -5,8 +5,8 @@
 # yolo_ros
 
 目次
-1. [概要](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md##概要)
-2. [対応モデル](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md##対応モデル)
+1. [概要](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md## 概要)
+2. [対応モデル](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md## 対応モデル)
 3. [セットアップ](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md##セットアップ)
 4. [実行・操作方法](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md##実行・操作方法)
 5. [パラメーター](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md##パラメーター)
