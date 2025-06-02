@@ -1,6 +1,9 @@
 <a name="readme-top"></a>
 
-[JP](README.md) | [EN](README_en.md)
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
 
 # yolo_ros
 
@@ -170,3 +173,14 @@ yolo_rosのすべてのノードはライフサイクルノードをサポート
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1j4VjCAsOCx_mtM2KFPOLkpJogM0t227r)](https://drive.google.com/file/d/1j4VjCAsOCx_mtM2KFPOLkpJogM0t227r/view?usp=sharing)
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[contributors-shield]: https://img.shields.io/github/contributors/TeamSOBITS/yolo_ros.svg?style=for-the-badge
+[contributors-url]: https://github.com/TeamSOBITS/yolo_ros/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/TeamSOBITS/yolo_ros.svg?style=for-the-badge
+[forks-url]: https://github.com/TeamSOBITS/yolo_ros/network/members
+[stars-shield]: https://img.shields.io/github/stars/TeamSOBITS/yolo_ros.svg?style=for-the-badge
+[stars-url]: https://github.com/TeamSOBITS/yolo_ros/stargazers
+[issues-shield]: https://img.shields.io/github/issues/TeamSOBITS/yolo_ros.svg?style=for-the-badge
+[issues-url]: https://github.com/TeamSOBITS/yolo_ros/issues
