@@ -21,13 +21,6 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 - トラッキング (Tracking)
 - インスタンスセグメンテーション (Instance Segmentation)
 - 人間の姿勢推定 (Human Pose Estimation)
-- Oriented Bounding Box (OBB)
-- 3D物体検出 (3D Object Detection)
-   - 深度画像を使用して3Dバウンディングボックスを生成
-- 3Dインスタンスセグメンテーション (3D Instance Segmentation)
-   - 深度画像とインスタンスマスクを使用
-- 3D人間の姿勢推定 (3D Human Pose Estimation)
-   - 深度画像とキーポイントを使用
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
@@ -130,7 +123,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 | min_clusterSize | どの程度の数以下の点群の集まりは対象物の点群から棄却するかのしきい値．点群をクラス分けした際に，この数以下の点群数だったらノイズとみなし棄却します． | 100 |
 | max_clusterSize | どの程度の数以上の点群の集まりは対象物の点群から棄却するかのしきい値．点群をクラス分けした際に，この数以上の点群数だったら全く別の対象物(物体だったら床の点群など)を捉えてしまったとみなし棄却します． | 20000 |
 | noise_point_cloud_range | 対象の物体の点群からノイズ面を除去し，中心座標に近づけるため除去量．クラス分けした点群から物体を抽出した後，床や背後の壁，左右の壁などx,y,z方向に点群をこの値分，更にカットします． こうすることで，より物体の部分のみにかかる点群に絞ることができます． しかし値を大きくしすぎると，物体分の点群まで多く削いでしまうため注意が必用です． | 0.01 |
-| fast_shot | fast_shotを有効にするかどうか(bboxが大きいときに検出速度が上昇) | true |
+| fast_shot | fast_shotを有効にするかどうか | true |
 | enable_id | 検出した物体のラベルの後ろにIDをつけるかどうか(例: apple_01) | false |
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
@@ -159,18 +152,6 @@ yolo_rosのすべてのノードはライフサイクルノードをサポート
 ## 人間の姿勢推定 (Human Pose)（yolov8m-pose.ptモデルを使用）
 
 [![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1pRy9lLSXiFEVFpcbesMCzmTMEoUXGWgr)](https://drive.google.com/file/d/1pRy9lLSXiFEVFpcbesMCzmTMEoUXGWgr/view?usp=sharing)
-
-## 3D物体検出 (3D Object Detection)
-
-[![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1ZcN_u9RB9_JKq37mdtpzXx3b44tlU-pr)](https://drive.google.com/file/d/1ZcN_u9RB9_JKq37mdtpzXx3b44tlU-pr/view?usp=sharing)
-
-## 3D物体検出 (インスタンスセグメンテーションマスクを使用)
-
-[![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1wVZgi5GLkAYxv3GmTxX5z-vB8RQdwqLP)](https://drive.google.com/file/d/1wVZgi5GLkAYxv3GmTxX5z-vB8RQdwqLP/view?usp=sharing)
-
-## 3D人間の姿勢推定 (3D Human Pose)
-
-[![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1j4VjCAsOCx_mtM2KFPOLkpJogM0t227r)](https://drive.google.com/file/d/1j4VjCAsOCx_mtM2KFPOLkpJogM0t227r/view?usp=sharing)
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
