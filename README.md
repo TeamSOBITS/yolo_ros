@@ -4,15 +4,43 @@
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
+[![License][license-shield]][license-url]
 
-# yolo_ros
+# Yolo ROS
 
 目次
+<details>
+  <summary>目次</summary>
+  <ol>
+    <li>
+      <a href="#概要">概要</a>
+    </li>
+    <li>
+      <a href="#対応モデル">対応モデル</a>
+    </li>
+    <li>
+      <a href="#セットアップ">セットアップ</a>
+      <ul>
+        <li><a href="#環境条件">環境条件</a></li>
+        <li><a href="#インストール方法">インストール方法</a></li>
+      </ul>
+    </li>
+    <li><a href="#実行操作方法">実行・操作方法</a></li>
+    <li><a href="#パラメーター">パラメーター</a></li>
+    <li><a href="#ライフサイクルノード">ライフサイクルノード</a></li>
+    <li><a href="#デモ">デモ</a></li>
+     <li><a href="#マイルストーン">マイルストーン</a></li>
+    <li><a href="#参考文献">参考文献</a></li>
+  </ol>
+</details>
+
+<!--
 1. [概要](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#概要)
 2. [対応モデル](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#対応モデル)
 3. [セットアップ](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#セットアップ)
 4. [実行・操作方法](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#実行・操作方法)
 5. [パラメーター](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#パラメーター)
+-->
 
 ## 概要
 yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOLO-Worldなど）をROS 2で利用するためのラッパーです．これにより，以下の機能がROS2環境で実現できます．
@@ -128,7 +156,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
-## ライフサイクルノード (Lifecycle Nodes)
+## ライフサイクルノード
 yolo_rosのすべてのノードはライフサイクルノードをサポートしています．これにより，未設定 (unconfigured) および非アクティブ (inactive) 状態での負荷を軽減し，アクティブ (active) 状態でのみモデルのロードとサブスクライバーのアクティブ化を行います．
 
 状態ごとのリソース比較 (yolov8m.ptモデル，30fpsビデオストリーム)
@@ -155,6 +183,13 @@ yolo_rosのすべてのノードはライフサイクルノードをサポート
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
+## マイルストーン
+現時点のbugや新規機能の依頼を確認するために[Issueページ][issues-url] をご覧ください．
+
+<!-- 参考文献 -->
+## 参考文献
+* [ultralytics](https://docs.ultralytics.com/ja/)
+
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/TeamSOBITS/yolo_ros.svg?style=for-the-badge
@@ -165,3 +200,5 @@ yolo_rosのすべてのノードはライフサイクルノードをサポート
 [stars-url]: https://github.com/TeamSOBITS/yolo_ros/stargazers
 [issues-shield]: https://img.shields.io/github/issues/TeamSOBITS/yolo_ros.svg?style=for-the-badge
 [issues-url]: https://github.com/TeamSOBITS/yolo_ros/issues
+[license-shield]: https://img.shields.io/github/license/TeamSOBITS/yolo_ros.svg?style=for-the-badge
+[license-url]: LICENSE
