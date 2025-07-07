@@ -25,7 +25,6 @@ setup(
     entry_points={
         "console_scripts": [
             "yolo_node = yolo_ros.yolo_node:main",
-            # "tracking_node = yolo_ros.tracking_node:main",
         ],
     },
 )

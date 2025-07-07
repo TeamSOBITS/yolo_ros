@@ -1,150 +1,141 @@
-# Copyright (C) 2023  Miguel Ángel González Santamarta
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import os
 from ament_index_python.packages import get_package_share_directory
-from launch import LaunchDescription, LaunchContext
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, IncludeLaunchDescription
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
 
 
 def generate_launch_description():
-
     image_topic_name = LaunchConfiguration("image_topic_name")
-    image_topic_name_cmd = DeclareLaunchArgument(
-        "image_topic_name",
-        description="ROS Topic Name of sensor_msgs/msg/Image message",
-        # default_value="/camera/camera/color/image_raw",   ## realsense
-        # default_value="/rgb/image_raw",                   ## azure_kinect
-        default_value="/camera/color/image_raw",          ## orbbec_series
-    )
-
     point_cloud_topic = LaunchConfiguration("point_cloud_topic")
-    point_cloud_topic_cmd = DeclareLaunchArgument(
-        "point_cloud_topic",
-        description="ROS Topic Name of sensor_msgs/msg/PointCloud2 message",
-        # default_value="/camera/camera/depth/color/points",   ## realsense
-        # default_value="/points2",                            ## azure_kinect
-        default_value="/camera/depth_registered/points",     ## orbbec_series
-    )
-
     model_type = LaunchConfiguration("model_type")
-    model_type_cmd = DeclareLaunchArgument(
-        "model_type",
-        default_value="YOLO",
-        choices=["YOLO", "NAS", "World"],
-        description="Model type form Ultralytics (YOLO, NAS",
-    )
-
     weight_file = LaunchConfiguration("weight_file")
-    weight_file_cmd = DeclareLaunchArgument(
-        "weight_file", description="weight file path",
-        default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),  ## custom weight file
-        # default_value="/yolov5mu.pt",         ## YOLOv5
-        # default_value="/yolov8m.pt",          ## YOLOv8
-        # default_value="/yolov9c.pt",          ## YOLOv9
-        # default_value="/yolov10m.pt",         ## YOLOv10
-        # default_value="/yolov11m.pt",         ## YOLOv11
-        # default_value="/yolo_nas_s.pt",       ## YOLO NAS
-        # default_value="/yolov8s-worldv2.pt",  ## YOLO World
-        # default_value="/yolo11n-pose.pt",     ## KeyPoint weight file of YOLO11
-    )
-
     init_prediction = LaunchConfiguration("init_prediction")
-    init_prediction_cmd = DeclareLaunchArgument(
-        "init_prediction", default_value="True", description="Whether to start YOLO enabled"
-    )
-
     image_show = LaunchConfiguration("image_show")
-    image_show_cmd = DeclareLaunchArgument(
-        "image_show",
-        default_value="False",
-        description="image show flag",
-    )
-
     threshold = LaunchConfiguration("threshold")
-    threshold_cmd = DeclareLaunchArgument(
-        "threshold",
-        default_value="0.5",
-        description="Minimum probability of a detection to be published",
-    )
-
     iou = LaunchConfiguration("iou")
-    iou_cmd = DeclareLaunchArgument(
-        "iou", default_value="0.7", description="IoU threshold"
-    )
-
     imgsz_height = LaunchConfiguration("imgsz_height")
-    imgsz_height_cmd = DeclareLaunchArgument(
-        "imgsz_height",
-        default_value="480",
-        description="Image height for inference",
-    )
-
     imgsz_width = LaunchConfiguration("imgsz_width")
-    imgsz_width_cmd = DeclareLaunchArgument(
-        "imgsz_width", default_value="640", description="Image width for inference"
-    )
-
     half = LaunchConfiguration("half")
-    half_cmd = DeclareLaunchArgument(
-        "half",
-        default_value="False",
-        description="Whether to enable half-precision (FP16) inference speeding up model inference with minimal impact on accuracy",
-    )
-
     max_det = LaunchConfiguration("max_det")
-    max_det_cmd = DeclareLaunchArgument(
-        "max_det",
-        default_value="300",
-        description="Maximum number of detections allowed per image",
-    )
-
     agnostic_nms = LaunchConfiguration("agnostic_nms")
-    agnostic_nms_cmd = DeclareLaunchArgument(
-        "agnostic_nms",
-        default_value="False",
-        description="Whether to enable class-agnostic Non-Maximum Suppression (NMS) merging overlapping boxes of different classes",
-    )
-
     retina_masks = LaunchConfiguration("retina_masks")
-    retina_masks_cmd = DeclareLaunchArgument(
-        "retina_masks",
-        default_value="False",
-        description="Whether to use high-resolution segmentation masks if available in the model, enhancing mask quality for segmentation",
-    )
-
     namespace = LaunchConfiguration("namespace")
-    namespace_cmd = DeclareLaunchArgument(
-        "namespace", default_value="yolo_ros", description="Namespace for the nodes"
-    )
+    base_frame_name = LaunchConfiguration("base_frame_name")
+    use_3d = LaunchConfiguration("use_3d")
+
+    launch_args = [
+        DeclareLaunchArgument(
+            "image_topic_name",
+            # default_value="/camera/camera/color/image_raw",  # Realsense
+            # default_value="/rgb/image_raw",                  # Azure Kinect
+            default_value="/camera/rgb/image_raw",             # xtion
+            # default_value="/camera/color/image_raw",         # Orbbec
+            description="ROS Topic Name of sensor_msgs/msg/Image message",
+        ),
+        DeclareLaunchArgument(
+            "point_cloud_topic",
+            # default_value="/camera/camera/depth/color/points",    # Realsense
+            # default_value="/points2",                             # Azure Kinect
+            default_value="/camera/depth_registered/points",        # xtion
+            # default_value="/camera/depth_registered/points",      # Orbbec
+            description="ROS Topic Name of sensor_msgs/msg/PointCloud2 message",
+        ),
+        DeclareLaunchArgument(
+            "model_type",
+            default_value="YOLO",
+            choices=["YOLO", "NAS", "World"],
+            description="Model type from Ultralytics (YOLO, NAS, World)",
+        ),
+        DeclareLaunchArgument(
+            "weight_file",
+            default_value="yolo11n.pt",             # YOLOv11
+            # default_value="yolov8s-worldv2.pt",   # YOLO World
+            # default_value="yolo11n-pose.pt",      # KeyPoint model
+            # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
+            description="Weight file path",
+        ),
+        DeclareLaunchArgument(
+            "init_prediction",
+            default_value="True",
+            description="Whether to start YOLO enabled",
+        ),
+        DeclareLaunchArgument(
+            "image_show",
+            default_value="False",
+            description="Flag to show image with predictions",
+        ),
+        DeclareLaunchArgument(
+            "threshold",
+            default_value="0.5",
+            description="Minimum probability of a detection to be published",
+        ),
+        DeclareLaunchArgument(
+            "iou",
+            default_value="0.7",
+            description="IoU threshold",
+        ),
+        DeclareLaunchArgument(
+            "imgsz_height",
+            default_value="480",
+            description="Image height for inference",
+        ),
+        DeclareLaunchArgument(
+            "imgsz_width",
+            default_value="640",
+            description="Image width for inference",
+        ),
+        DeclareLaunchArgument(
+            "half",
+            default_value="False",
+            description="Enable FP16 inference",
+        ),
+        DeclareLaunchArgument(
+            "max_det",
+            default_value="300",
+            description="Maximum number of detections per image",
+        ),
+        DeclareLaunchArgument(
+            "agnostic_nms",
+            default_value="False",
+            description="Enable class-agnostic NMS",
+        ),
+        DeclareLaunchArgument(
+            "retina_masks",
+            default_value="False",
+            description="Use high-res segmentation masks if available",
+        ),
+        DeclareLaunchArgument(
+            "namespace",
+            default_value="yolo_ros",
+            description="Namespace for the nodes",
+        ),
+        DeclareLaunchArgument(
+            "base_frame_name",
+            default_value="camera_rgb_frame",
+            description="Base frame name for TF and 3D detection",
+        ),
+        DeclareLaunchArgument(
+            "use_3d",
+            default_value="True",
+            description="Whether to activate 3D detections",
+        ),
+    ]
 
     class_list = os.path.join(
         get_package_share_directory("yolo_ros"),
         "yolo_world_classes",
         "class_list.yaml"
-        )
+    )
 
     keypoint_dictionary = os.path.join(
         get_package_share_directory("yolo_ros"),
         "keypoints",
         "key_point_dictionary.yaml"
-        )
+    )
 
     yolo_node_cmd = Node(
         package="yolo_ros",
@@ -166,16 +157,12 @@ def generate_launch_description():
                 "agnostic_nms": agnostic_nms,
                 "retina_masks": retina_masks,
                 "image_show": image_show,
+                "base_frame_name": base_frame_name,
             },
             class_list,
             keypoint_dictionary,
         ],
         output="screen"
-    )
-
-    use_3d = LaunchConfiguration("use_3d")
-    use_3d_cmd = DeclareLaunchArgument(
-        "use_3d", default_value="True", description="Whether to activate 3D detections"
     )
 
     bbox_to_3d_cmd = IncludeLaunchDescription(
@@ -188,7 +175,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "namespace": namespace,
-            "base_frame_name": "base_footprint",
+            "base_frame_name": base_frame_name,
             "bbox_topic_name": "/yolo_ros/object_boxes",
             "cloud_topic_name": point_cloud_topic,
             "img_topic_name": image_topic_name,
@@ -197,10 +184,10 @@ def generate_launch_description():
             "min_clusterSize": "100",
             "max_clusterSize": "20000",
             "noise_point_cloud_range": "0.01",
-            "fast_shot": "true",
+            "fast_shot": "false",
             "enable_id": "false",
         }.items(),
-        condition=IfCondition(use_3d),  # use_3dがTrueのときのみ実行
+        condition=IfCondition(use_3d),
     )
 
     keypoint_to_3d_cmd = IncludeLaunchDescription(
@@ -213,34 +200,18 @@ def generate_launch_description():
         ),
         launch_arguments={
             "namespace": namespace,
-            "base_frame_name": "base_footprint",
+            "base_frame_name": base_frame_name,
             "keypoints_topic_name": "/yolo_ros/object_keypoints",
             "cloud_topic_name": point_cloud_topic,
             "img_topic_name": image_topic_name,
             "execute_default": init_prediction,
             "enable_id": "true",
         }.items(),
-        condition=IfCondition(use_3d),  # use_3dがTrueのときのみ実行
+        condition=IfCondition(use_3d),
     )
 
     return LaunchDescription(
-        [
-            use_3d_cmd,
-            model_type_cmd,
-            weight_file_cmd,
-            init_prediction_cmd,
-            image_topic_name_cmd,
-            point_cloud_topic_cmd,
-            threshold_cmd,
-            iou_cmd,
-            imgsz_height_cmd,
-            imgsz_width_cmd,
-            half_cmd,
-            max_det_cmd,
-            agnostic_nms_cmd,
-            retina_masks_cmd,
-            image_show_cmd,
-            namespace_cmd,
+        launch_args + [
             yolo_node_cmd,
             bbox_to_3d_cmd,
             keypoint_to_3d_cmd,
