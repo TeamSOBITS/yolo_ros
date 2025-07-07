@@ -34,14 +34,6 @@
   </ol>
 </details>
 
-<!--
-1. [概要](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#概要)
-2. [対応モデル](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#対応モデル)
-3. [セットアップ](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#セットアップ)
-4. [実行・操作方法](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#実行・操作方法)
-5. [パラメーター](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/README.md#パラメーター)
--->
-
 ## 概要
 yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOLO-Worldなど）をROS 2で利用するためのラッパーです．これにより，以下の機能がROS2環境で実現できます．
 
@@ -50,17 +42,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 - インスタンスセグメンテーション (Instance Segmentation)
 - 人間の姿勢推定 (Human Pose Estimation)
 
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
-## 対応モデル
-|  |  |  |
-| ------------- | ------------- | ------------- |
-| [YOLOv3](https://docs.ultralytics.com/models/yolov3/) | [YOLOv4](https://docs.ultralytics.com/models/yolov4/) | [YOLOv5](https://docs.ultralytics.com/models/yolov5/) |
-| [YOLOv6](https://docs.ultralytics.com/models/yolov6/) | [YOLOv7](https://docs.ultralytics.com/models/yolov7/) | [YOLOv8](https://docs.ultralytics.com/models/yolov8/) |
-| [YOLOv9](https://docs.ultralytics.com/models/yolov9/) | [YOLOv10](https://docs.ultralytics.com/models/yolov10/) | [YOLOv11](https://docs.ultralytics.com/models/yolo11/) |
-| [YOLO-NAS](https://docs.ultralytics.com/models/yolo-nas/) | [YOLO-World](https://docs.ultralytics.com/models/yolo-world/) |  |
-
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 ## セットアップ
 本レポジトリのセットアップ方法について説明します．
@@ -95,7 +77,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
    cd ~/colcon_ws/
    colcon build --symlink-install
    ```
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
+
 
 
 <!-- 実行・操作方法 -->
@@ -104,19 +86,19 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
    
    例
    ```sh
-   default_value="/camera/color/image_raw",          ## orbbec_series
+   default_value="/camera/color/image_raw"          ## orbbec_series
    ```
 2. RGBDカメラを使用する場合は，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**point_cloud_topic**も使用するカメラの点群のトピック名に書き換える．
    
    例
    ```sh
-   default_value="/camera/depth_registered/points",     ## orbbec_series
-   ```. 
+   default_value="/camera/depth_registered/points"     ## orbbec_series
+   ```
 3. ウェイトファイルを設定\
     用意したウェイトファイルを[weightsディレクトリ](https://github.com/TeamSOBITS/yolo_ros/tree/humble-devel/weights)に入れる．
 4. [yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**weight_file**を，手順3で設定したウェイトファイル名に書き換える．
    ```sh
-   default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),  ## custom weight file
+   default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt")  ## custom weight file
    ```
 5. colcon buildを実行
    ```sh
@@ -128,7 +110,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
     ros2 launch yolo_ros yolo.launch.py
     ```
 
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
+
 
 ## パラメーター
 以下は[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)で設定できるパラメーターである．
@@ -154,7 +136,6 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 | fast_shot | fast_shotを有効にするかどうか | true |
 | enable_id | 検出した物体のラベルの後ろにIDをつけるかどうか(例: apple_01) | false |
 
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 ## ライフサイクルノード
 yolo_rosのすべてのノードはライフサイクルノードをサポートしています．これにより，未設定 (unconfigured) および非アクティブ (inactive) 状態での負荷を軽減し，アクティブ (active) 状態でのみモデルのロードとサブスクライバーのアクティブ化を行います．
@@ -166,32 +147,18 @@ yolo_rosのすべてのノードはライフサイクルノードをサポート
 | Active   | 40-50% in one core      | 628 MB     | Up to 200 Mbps  |
 | Inactive | ~5-7% in one core       | 338 MB     | 0-20 Kbps       |
 
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
+
 
 ## デモ
-## 物体検出 (Object Detection)（トラッキングを含む標準動作）
+| 物体検出 | 姿勢推定 | インスタンスセグメンテーション |
+|:---:|:---:|:---:|
+| ![](docs/yolo11n.jpg) | ![](docs/yolo11n-pose.jpg) | ![](docs/yoloe-11s-seg.jpg) |
 
-[![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1gTQt6soSIq1g2QmK7locHDiZ-8MqVl2w)](https://drive.google.com/file/d/1gTQt6soSIq1g2QmK7locHDiZ-8MqVl2w/view?usp=sharing)
 
-## インスタンスセグメンテーション (Instance Segmentation)（yolov8m-seg.ptモデルを使用）
 
-[![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1dwArjDLSNkuOGIB0nSzZR6ABIOCJhAFq)](https://drive.google.com/file/d/1dwArjDLSNkuOGIB0nSzZR6ABIOCJhAFq/view?usp=sharing)
-
-## 人間の姿勢推定 (Human Pose)（yolov8m-pose.ptモデルを使用）
-
-[![](https://drive.google.com/thumbnail?authuser=0&sz=w1280&id=1pRy9lLSXiFEVFpcbesMCzmTMEoUXGWgr)](https://drive.google.com/file/d/1pRy9lLSXiFEVFpcbesMCzmTMEoUXGWgr/view?usp=sharing)
-
-<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
-
-## マイルストーン
-現時点のbugや新規機能の依頼を確認するために[Issueページ][issues-url] をご覧ください．
-
-<!-- 参考文献 -->
 ## 参考文献
 * [ultralytics](https://docs.ultralytics.com/ja/)
 
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/TeamSOBITS/yolo_ros.svg?style=for-the-badge
 [contributors-url]: https://github.com/TeamSOBITS/yolo_ros/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/TeamSOBITS/yolo_ros.svg?style=for-the-badge
