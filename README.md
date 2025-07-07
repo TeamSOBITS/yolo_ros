@@ -85,13 +85,13 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
    
    例
    ```sh
-   default_value="/camera/color/image_raw"          ## orbbec_series
+   default_value="/camera/color/image_raw"          # orbbec_series
    ```
 2. RGBDカメラを使用する場合は，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**point_cloud_topic**も使用するカメラの点群のトピック名に書き換える．
    
    例
    ```sh
-   default_value="/camera/depth_registered/points"     ## orbbec_series
+   default_value="/camera/depth_registered/points"     # orbbec_series
    ```
 3. ウェイトファイルを設定\
     用意したウェイトファイルを[weightsディレクトリ](https://github.com/TeamSOBITS/yolo_ros/tree/humble-devel/weights)に入れる．
