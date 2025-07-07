@@ -8,7 +8,6 @@
 
 # Yolo ROS
 
-目次
 <details>
   <summary>目次</summary>
   <ol>
