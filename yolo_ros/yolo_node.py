@@ -1,6 +1,5 @@
 import cv2
 from cv_bridge import CvBridge
-import numpy as np
 
 import rclpy
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
@@ -8,7 +7,6 @@ from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleSt
 
 from ultralytics import YOLO, NAS, YOLOWorld
 from ultralytics.engine.results import Results
-from ultralytics.utils.plotting import colors
 
 from geometry_msgs.msg import Point, Quaternion
 from std_srvs.srv import SetBool
@@ -40,8 +38,6 @@ class YoloNode(LifecycleNode):
         self.type_to_model = {"YOLO": YOLO, "NAS": NAS, "World": YOLOWorld}
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info(f"[{self.get_name()}] Configuring...")
-
         self.model_type = self.get_parameter("model_type").get_parameter_value().string_value
         self.model = self.get_parameter("weight_file").get_parameter_value().string_value
         self.image_topic_name = self.get_parameter("image_topic_name").get_parameter_value().string_value
@@ -71,12 +67,9 @@ class YoloNode(LifecycleNode):
         self.cv_bridge = CvBridge()
 
         super().on_configure(state)
-        self.get_logger().info(f"[{self.get_name()}] Configured")
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info(f"[{self.get_name()}] Activating...")
-
         try:
             self.yolo = self.type_to_model[self.model_type](self.model)
         except FileNotFoundError:
@@ -84,7 +77,6 @@ class YoloNode(LifecycleNode):
             return TransitionCallbackReturn.ERROR
 
         try:
-            self.get_logger().info("Trying to fuse model...")
             self.yolo.fuse()
         except TypeError as e:
             self.get_logger().warn(f"Error while fuse: {e}")
@@ -97,41 +89,27 @@ class YoloNode(LifecycleNode):
         self._sub = self.create_subscription(Image, self.image_topic_name, self.image_cb, self.image_qos_profile)
 
         super().on_activate(state)
-        self.get_logger().info(f"[{self.get_name()}] Activated")
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info(f"[{self.get_name()}] Deactivating...")
-
         del self.yolo
-
         self.destroy_service(self._enable_srv)
         self._enable_srv = None
-
         self.destroy_subscription(self._sub)
         self._sub = None
-
         super().on_deactivate(state)
-        self.get_logger().info(f"[{self.get_name()}] Deactivated")
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info(f"[{self.get_name()}] Cleaning up...")
-
         self.destroy_publisher(self._pub_rect)
         self.destroy_publisher(self._pub_keypoint)
         self.destroy_publisher(self._pub_img)
-
         del self.image_qos_profile
-
         super().on_cleanup(state)
-        self.get_logger().info(f"[{self.get_name()}] Cleaned up")
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info(f"[{self.get_name()}] Shutting down...")
         super().on_cleanup(state)
-        self.get_logger().info(f"[{self.get_name()}] Shut down")
         return TransitionCallbackReturn.SUCCESS
 
     def enable_cb(self, request: SetBool.Request, response: SetBool.Response) -> SetBool.Response:
@@ -147,22 +125,19 @@ class YoloNode(LifecycleNode):
         cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
 
         if encoding == 'bgr8':
-            cv_image_out = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
         elif encoding == 'bgra8':
-            cv_image_out = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
+            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
         elif encoding == 'rgba8':
-            cv_image_out = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
+            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
         elif encoding == 'rgb8':
-            cv_image_out = cv_image
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
+            cv_image_rgb = cv_image
         else:
             self.get_logger().error(f"Unsupported encoding: {encoding}")
             return
 
         results = self.yolo.predict(
-            source=cv_image,
+            source=cv_image_rgb,
             verbose=False,
             stream=False,
             conf=self.threshold,
@@ -174,6 +149,7 @@ class YoloNode(LifecycleNode):
             retina_masks=self.retina_masks,
             show=self.image_show,
         )
+        
         results: Results = results[0].cpu()
 
         detections_bboxes_msg = Detection2DArray()
@@ -212,21 +188,6 @@ class YoloNode(LifecycleNode):
                 bbox.results.append(ohwp)
                 detections_bboxes_msg.detections.append(bbox)
 
-                label = f"{class_name} {conf:.2f}"
-                x_min = bbox.bbox.center.position.x - bbox.bbox.size_x / 2
-                y_min = bbox.bbox.center.position.y - bbox.bbox.size_y / 2
-                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-
-                rect = ((bbox.bbox.center.position.x, bbox.bbox.center.position.y),
-                        (bbox.bbox.size_x, bbox.bbox.size_y), 0.0)
-                rec_box = cv2.boxPoints(rect)
-                rec_box = np.array(rec_box, dtype=np.int32)
-
-                cv2.polylines(cv_image_out, [rec_box], True, colors(cls_idx, False), 2)
-                cv2.rectangle(cv_image_out, (int(x_min), int(y_min) - h), (int(x_min) + w, int(y_min)), colors(cls_idx, True), -1)
-                cv2.putText(cv_image_out, label, (int(x_min), int(y_min)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-
             if results.keypoints:
                 if results.keypoints[i].conf is None:
                     continue
@@ -236,8 +197,13 @@ class YoloNode(LifecycleNode):
                         kp.key_points.append(Point(x=float(p[0]), y=float(p[1]), z=-1.0))
                 detections_keypoints_msg.key_points_array.append(kp)
 
-        ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image_out, "rgb8")
-        ros_image.header = header
+        if hasattr(results, 'plot'):
+            annotated_image = results.plot()
+            ros_image = self.cv_bridge.cv2_to_imgmsg(annotated_image, "rgb8")
+            ros_image.header = header
+        else:
+            ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image_rgb, "rgb8")
+            ros_image.header = header
 
         self._pub_rect.publish(detections_bboxes_msg)
         self._pub_keypoint.publish(detections_keypoints_msg)

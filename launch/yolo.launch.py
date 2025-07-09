@@ -52,9 +52,9 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo11n.pt",             # YOLOv11
-            # default_value="yolov8s-worldv2.pt",   # YOLO World
-            # default_value="yolo11n-pose.pt",      # KeyPoint model
+            default_value="yolo11n.pt",       # YOLOv11
+            # default_value="yolo11n-pose.pt",  # KeyPoint model
+            # default_value="yolo11n-seg.pt",   # Segmentation
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file path",
         ),
@@ -120,7 +120,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "use_3d",
-            default_value="True",
+            default_value="False",
             description="Whether to activate 3D detections",
         ),
     ]
