@@ -11,18 +11,16 @@ from launch.conditions import IfCondition
 def generate_launch_description():
     image_topic_name = LaunchConfiguration("image_topic_name")
     point_cloud_topic = LaunchConfiguration("point_cloud_topic")
+    depth_image_topic_name = LaunchConfiguration("depth_image_topic_name")
+    info_topic_name = LaunchConfiguration("info_topic_name")
+    positioning_detection_mode_object = LaunchConfiguration("positioning_detection_mode_object")
+    positioning_detection_mode_keypoint = LaunchConfiguration("positioning_detection_mode_keypoint")
     model_type = LaunchConfiguration("model_type")
     weight_file = LaunchConfiguration("weight_file")
-    init_prediction = LaunchConfiguration("init_prediction")
+    execute_default = LaunchConfiguration("execute_default")
     image_show = LaunchConfiguration("image_show")
     threshold = LaunchConfiguration("threshold")
     iou = LaunchConfiguration("iou")
-    imgsz_height = LaunchConfiguration("imgsz_height")
-    imgsz_width = LaunchConfiguration("imgsz_width")
-    half = LaunchConfiguration("half")
-    max_det = LaunchConfiguration("max_det")
-    agnostic_nms = LaunchConfiguration("agnostic_nms")
-    retina_masks = LaunchConfiguration("retina_masks")
     namespace = LaunchConfiguration("namespace")
     base_frame_name = LaunchConfiguration("base_frame_name")
     use_3d = LaunchConfiguration("use_3d")
@@ -30,19 +28,45 @@ def generate_launch_description():
     launch_args = [
         DeclareLaunchArgument(
             "image_topic_name",
-            # default_value="/camera/camera/color/image_raw",  # Realsense
-            # default_value="/rgb/image_raw",                  # Azure Kinect
-            default_value="/camera/rgb/image_raw",             # xtion
-            # default_value="/camera/color/image_raw",         # Orbbec
-            description="ROS Topic Name of sensor_msgs/msg/Image message",
+            description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
+            # default_value="/camera/color/image_raw",            ## realsense
+            # default_value="/rgb/image_raw",                   ## azure_kinect ##
+            # default_value="/camera/color/image_raw",          ## orbbec_series ##
+            default_value="/sobit_pro/head_camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "point_cloud_topic",
-            # default_value="/camera/camera/depth/color/points",    # Realsense
-            # default_value="/points2",                             # Azure Kinect
-            default_value="/camera/depth_registered/points",        # xtion
-            # default_value="/camera/depth_registered/points",      # Orbbec
-            description="ROS Topic Name of sensor_msgs/msg/PointCloud2 message",
+            description="Detection 3D Pose from 2D Pose (sensor_msgs/msg/PointCloud2). if you select the 'point_cloud' in 'positioning_detection_mode'.",
+            # default_value="/camera/depth/color/points",            ## realsense
+            # default_value="/points2",                            ## azure_kinect ##
+            # default_value="/camera/depth_registered/points",     ## orbbec_series ##
+            default_value="/sobit_pro/head_camera/depth_registered/points",     ## xtion
+        ),
+        DeclareLaunchArgument(
+            "depth_image_topic_name",
+            description="Detection 3D Pose from 2D Pose (sensor_msgs/msg/Image). if you select the 'depth_image' in 'positioning_detection_mode'.",
+            # default_value="/camera/depth/image_rect_raw", ## realsense
+            # default_value="", ## azure_kinect ##
+            # default_value="", ## orbbec_series ##
+            default_value="/sobit_pro/head_camera/depth/image_raw",    ## xtion
+        ),
+        DeclareLaunchArgument(
+            "info_topic_name",
+            description="Setup the camera info topic name. (sensor_msgs/msg/CameraInfo)",
+            # default_value="/camera/color/camera_info", ## realsense
+            # default_value="", ## azure_kinect ##
+            # default_value="", ## orbbec_series ##
+            default_value="/sobit_pro/head_camera/rgb/camera_info", ## xtion
+        ),
+        DeclareLaunchArgument(
+            "positioning_detection_mode_object",
+            description="Select the 3D Pose Detection mode. Choose of ['point_cloud', 'fast_point', 'depth_image']",
+            default_value="point_cloud",
+        ),
+        DeclareLaunchArgument(
+            "positioning_detection_mode_keypoint",
+            description="Select the 3D Pose Detection mode. Choose of ['point_cloud', 'depth_image']",
+            default_value="point_cloud",
         ),
         DeclareLaunchArgument(
             "model_type",
@@ -52,14 +76,14 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo11n.pt",       # YOLOv11
+            # default_value="yolo11n.pt",       # YOLOv11
             # default_value="yolo11n-pose.pt",  # KeyPoint model
             # default_value="yolo11n-seg.pt",   # Segmentation
-            # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
+            default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file path",
         ),
         DeclareLaunchArgument(
-            "init_prediction",
+            "execute_default",
             default_value="True",
             description="Whether to start YOLO enabled",
         ),
@@ -70,7 +94,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "threshold",
-            default_value="0.5",
+            default_value="0.35",
             description="Minimum probability of a detection to be published",
         ),
         DeclareLaunchArgument(
@@ -79,48 +103,18 @@ def generate_launch_description():
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
-            "imgsz_height",
-            default_value="480",
-            description="Image height for inference",
-        ),
-        DeclareLaunchArgument(
-            "imgsz_width",
-            default_value="640",
-            description="Image width for inference",
-        ),
-        DeclareLaunchArgument(
-            "half",
-            default_value="False",
-            description="Enable FP16 inference",
-        ),
-        DeclareLaunchArgument(
-            "max_det",
-            default_value="300",
-            description="Maximum number of detections per image",
-        ),
-        DeclareLaunchArgument(
-            "agnostic_nms",
-            default_value="False",
-            description="Enable class-agnostic NMS",
-        ),
-        DeclareLaunchArgument(
-            "retina_masks",
-            default_value="False",
-            description="Use high-res segmentation masks if available",
-        ),
-        DeclareLaunchArgument(
             "namespace",
             default_value="yolo_ros",
             description="Namespace for the nodes",
         ),
         DeclareLaunchArgument(
             "base_frame_name",
-            default_value="camera_rgb_frame",
+            default_value="base_footprint",
             description="Base frame name for TF and 3D detection",
         ),
         DeclareLaunchArgument(
             "use_3d",
-            default_value="False",
+            default_value="True",
             description="Whether to activate 3D detections",
         ),
     ]
@@ -146,18 +140,17 @@ def generate_launch_description():
             {
                 "model_type": model_type,
                 "weight_file": weight_file,
-                "init_prediction": init_prediction,
+                "execute_default": execute_default,
                 "image_topic_name": image_topic_name,
                 "threshold": threshold,
                 "iou": iou,
-                "imgsz_height": imgsz_height,
-                "imgsz_width": imgsz_width,
-                "half": half,
-                "max_det": max_det,
-                "agnostic_nms": agnostic_nms,
-                "retina_masks": retina_masks,
+                "imgsz_height": 480,
+                "imgsz_width": 640,
+                "half": False,
+                "max_det": 300,
+                "agnostic_nms": False,
+                "retina_masks": False,
                 "image_show": image_show,
-                "base_frame_name": base_frame_name,
             },
             class_list,
             keypoint_dictionary,
@@ -178,14 +171,15 @@ def generate_launch_description():
             "base_frame_name": base_frame_name,
             "bbox_topic_name": "/yolo_ros/object_boxes",
             "cloud_topic_name": point_cloud_topic,
-            "img_topic_name": image_topic_name,
-            "execute_default": init_prediction,
+            "depth_image_topic_name": depth_image_topic_name,
+            "info_topic_name": info_topic_name,
+            "execute_default": execute_default,
             "cluster_tolerance": "0.01",
-            "min_clusterSize": "100",
+            "min_clusterSize": "200",
             "max_clusterSize": "20000",
-            "noise_point_cloud_range": "0.01",
-            "fast_shot": "false",
-            "enable_id": "false",
+            "noise_point_cloud_range": "0.03",
+            "enable_id": "False",
+            "positioning_detection_mode": positioning_detection_mode_object,
         }.items(),
         condition=IfCondition(use_3d),
     )
@@ -203,9 +197,11 @@ def generate_launch_description():
             "base_frame_name": base_frame_name,
             "keypoints_topic_name": "/yolo_ros/object_keypoints",
             "cloud_topic_name": point_cloud_topic,
-            "img_topic_name": image_topic_name,
-            "execute_default": init_prediction,
-            "enable_id": "true",
+            "depth_image_topic_name": depth_image_topic_name,
+            "info_topic_name": info_topic_name,
+            "execute_default": execute_default,
+            "enable_id": "False",
+            "positioning_detection_mode": positioning_detection_mode_keypoint,
         }.items(),
         condition=IfCondition(use_3d),
     )

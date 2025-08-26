@@ -24,14 +24,14 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("image_topic_name", "image_raw")
         self.declare_parameter("threshold", 0.5)
         self.declare_parameter("iou", 0.5)
-        self.declare_parameter("imgsz_height", 640)
+        self.declare_parameter("imgsz_height", 480)
         self.declare_parameter("imgsz_width", 640)
         self.declare_parameter("half", False)
         self.declare_parameter("max_det", 300)
         self.declare_parameter("agnostic_nms", False)
         self.declare_parameter("retina_masks", False)
         self.declare_parameter("image_show", False)
-        self.declare_parameter("init_prediction", True)
+        self.declare_parameter("execute_default", True)
         self.declare_parameter("classes", [""])
         self.declare_parameter("keypoint_name_list", [""])
 
@@ -50,7 +50,7 @@ class YoloNode(LifecycleNode):
         self.agnostic_nms = self.get_parameter("agnostic_nms").get_parameter_value().bool_value
         self.retina_masks = self.get_parameter("retina_masks").get_parameter_value().bool_value
         self.image_show = self.get_parameter("image_show").get_parameter_value().bool_value
-        self.enable = self.get_parameter("init_prediction").get_parameter_value().bool_value
+        self.enable = self.get_parameter("execute_default").get_parameter_value().bool_value
         self.classes = self.get_parameter("classes").get_parameter_value().string_array_value
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
 
