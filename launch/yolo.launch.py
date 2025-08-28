@@ -29,34 +29,34 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
-            # default_value="/camera/color/image_raw",            ## realsense
-            # default_value="/rgb/image_raw",                   ## azure_kinect ##
+            default_value="/camera/color/image_raw",            ## realsense
+            # default_value="/rgb/image_raw",                   ## azure_kinect
             # default_value="/camera/color/image_raw",          ## orbbec_series ##
-            default_value="/sobit_pro/head_camera/rgb/image_raw",            ## xtion
+            # default_value="/camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "point_cloud_topic",
             description="Detection 3D Pose from 2D Pose (sensor_msgs/msg/PointCloud2). if you select the 'point_cloud' in 'positioning_detection_mode'.",
-            # default_value="/camera/depth/color/points",            ## realsense
-            # default_value="/points2",                            ## azure_kinect ##
+            default_value="/camera/depth/color/points",            ## realsense
+            # default_value="/points2",                            ## azure_kinect
             # default_value="/camera/depth_registered/points",     ## orbbec_series ##
-            default_value="/sobit_pro/head_camera/depth_registered/points",     ## xtion
+            # default_value="/camera/depth_registered/points",     ## xtion
         ),
         DeclareLaunchArgument(
             "depth_image_topic_name",
             description="Detection 3D Pose from 2D Pose (sensor_msgs/msg/Image). if you select the 'depth_image' in 'positioning_detection_mode'.",
-            # default_value="/camera/depth/image_rect_raw", ## realsense
-            # default_value="", ## azure_kinect ##
+            default_value="/camera/depth/image_rect_raw", ## realsense
+            # default_value="/depth_to_rgb/image_raw", ## azure_kinect
             # default_value="", ## orbbec_series ##
-            default_value="/sobit_pro/head_camera/depth/image_raw",    ## xtion
+            # default_value="/camera/depth/image_raw",    ## xtion
         ),
         DeclareLaunchArgument(
             "info_topic_name",
             description="Setup the camera info topic name. (sensor_msgs/msg/CameraInfo)",
-            # default_value="/camera/color/camera_info", ## realsense
-            # default_value="", ## azure_kinect ##
+            default_value="/camera/color/camera_info", ## realsense
+            # default_value="/rgb/camera_info", ## azure_kinect
             # default_value="", ## orbbec_series ##
-            default_value="/sobit_pro/head_camera/rgb/camera_info", ## xtion
+            # default_value="/camera/rgb/camera_info", ## xtion
         ),
         DeclareLaunchArgument(
             "positioning_detection_mode_object",
@@ -76,10 +76,10 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "weight_file",
-            # default_value="yolo11n.pt",       # YOLOv11
+            default_value="yolo11n.pt",       # YOLOv11
             # default_value="yolo11n-pose.pt",  # KeyPoint model
             # default_value="yolo11n-seg.pt",   # Segmentation
-            default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
+            # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file path",
         ),
         DeclareLaunchArgument(
