@@ -114,7 +114,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "use_3d",
-            default_value="False",
+            default_value="True",
             description="Whether to activate 3D detections",
         ),
     ]

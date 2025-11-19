@@ -23,6 +23,7 @@ from sobits_interfaces.msg import KeyPoint
 from sobits_interfaces.msg import KeyPointArray
 
 from sensor_msgs.msg import Image
+
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Detection2D
 from vision_msgs.msg import ObjectHypothesisWithPose
@@ -33,6 +34,7 @@ class YoloNode(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("yolo_ros")
 
+        # params
         self.declare_parameter("model_type", "YOLO")
         self.declare_parameter("weight_file", "yolo11n.pt")
 
@@ -70,10 +72,13 @@ class YoloNode(LifecycleNode):
         self.agnostic_nms = self.get_parameter("agnostic_nms").get_parameter_value().bool_value
         self.retina_masks = self.get_parameter("retina_masks").get_parameter_value().bool_value
         self.image_show = self.get_parameter("image_show").get_parameter_value().bool_value
+
+        # ros params
         self.enable = self.get_parameter("execute_default").get_parameter_value().bool_value
         self.classes = self.get_parameter("classes").get_parameter_value().string_array_value
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
 
+        # detection pub
         self.image_qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -268,7 +273,12 @@ class YoloNode(LifecycleNode):
                         kp.key_points += [Point(x=float(p[0]), y=float(p[1]), z=float(-1))]
                 detections_keypoints_msg.key_points_array += [kp]
 
-        ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image_out, "rgb8")
+        if hasattr(results, 'plot'):
+            annotated_image = results.plot()
+            ros_image = self.cv_bridge.cv2_to_imgmsg(annotated_image, "bgr8")
+        else:
+            ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image_out, "rgb8")
+
         ros_image.header = header
 
         self._pub_rect.publish(detections_bboxes_msg)
