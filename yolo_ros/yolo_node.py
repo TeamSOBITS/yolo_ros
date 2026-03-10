@@ -54,16 +54,37 @@ class YoloNode(LifecycleNode):
         self.classes = self.get_parameter("classes").get_parameter_value().string_array_value
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
 
+        self.get_logger().info(f"Model type: {self.model_type}")
+        self.get_logger().info(f"Weight file: {self.model}")
+        self.get_logger().info(f"Image topic name: {self.image_topic_name}")
+        self.get_logger().info(f"Threshold: {self.threshold}")
+        self.get_logger().info(f"IoU: {self.iou}")
+        self.get_logger().info(f"Image size: ({self.imgsz_height}, {self.imgsz_width})")
+        self.get_logger().info(f"Half precision: {self.half}")
+        self.get_logger().info(f"Max detections: {self.max_det}")
+        self.get_logger().info(f"Agnostic NMS: {self.agnostic_nms}")
+        self.get_logger().info(f"Retina masks: {self.retina_masks}")
+        self.get_logger().info(f"Show image: {self.image_show}")
+        self.get_logger().info(f"Execute default: {self.enable}")
+        self.get_logger().info(f"Classes: {self.classes}")
+        self.get_logger().info(f"Keypoint names: {self.keypoint_name_list}")
+
         self.image_qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
             durability=QoSDurabilityPolicy.VOLATILE,
-            depth=1,
+            depth=10
+        )
+        self._pub_rect = self.create_lifecycle_publisher(
+            Detection2DArray, self.get_name() + "/object_boxes", 1
+        )
+        self._pub_keypoint = self.create_lifecycle_publisher(
+            KeyPointArray, self.get_name() + "/object_keypoints", 1
+        )
+        self._pub_img = self.create_lifecycle_publisher(
+            Image, self.get_name() + "/detected_image", 1
         )
 
-        self._pub_rect = self.create_lifecycle_publisher(Detection2DArray, "object_boxes", 1)
-        self._pub_keypoint = self.create_lifecycle_publisher(KeyPointArray, "object_keypoints", 1)
-        self._pub_img = self.create_lifecycle_publisher(Image, "detect_image", 1)
         self.cv_bridge = CvBridge()
 
         super().on_configure(state)
@@ -115,10 +136,13 @@ class YoloNode(LifecycleNode):
     def enable_cb(self, request: SetBool.Request, response: SetBool.Response) -> SetBool.Response:
         self.enable = request.data
         response.success = True
+        self.get_logger().info(f"YOLO {'enabled' if self.enable else 'disabled'}")
         return response
 
     def image_cb(self, msg: Image) -> None:
+        self.get_logger().debug(f"Received image with encoding: {msg.encoding}")
         if not self.enable:
+            self.get_logger().debug("YOLO is disabled, skipping image processing")
             return
 
         encoding = msg.encoding
