@@ -73,7 +73,7 @@ class YoloNode(LifecycleNode):
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
             durability=QoSDurabilityPolicy.VOLATILE,
-            depth=10
+            depth=1,
         )
         self._pub_rect = self.create_lifecycle_publisher(
             Detection2DArray, self.get_name() + "/object_boxes", 1
