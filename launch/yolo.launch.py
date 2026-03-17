@@ -137,6 +137,7 @@ def generate_launch_description():
                 get_package_share_directory("image_to_position"), "config",
                 "bbox_to_3d.yaml"
             ),
+            "execute_default": execute_default,
         }.items(),
         condition=IfCondition(use_3d),
     )
@@ -155,6 +156,7 @@ def generate_launch_description():
                 get_package_share_directory("image_to_position"), "config",
                 "keypoint_to_3d.yaml"
             ),
+            "execute_default": execute_default,
         }.items(),
         condition=IfCondition(use_3d),
     )
