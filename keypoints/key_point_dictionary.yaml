@@ -1,4 +1,4 @@
-yolo_ros/yolo_node:
+/**/yolo_ros:
   ros__parameters:
     keypoint_name_list:
       - "nose"
