@@ -29,16 +29,6 @@ def generate_launch_description():
             # default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
-            "positioning_detection_mode_object",
-            description="Select the 3D Pose Detection mode. Choose of ['point_cloud', 'fast_point', 'depth_image']",
-            default_value="point_cloud",
-        ),
-        DeclareLaunchArgument(
-            "positioning_detection_mode_keypoint",
-            description="Select the 3D Pose Detection mode. Choose of ['point_cloud', 'depth_image']",
-            default_value="point_cloud",
-        ),
-        DeclareLaunchArgument(
             "model_type",
             default_value="YOLO",
             choices=["YOLO", "NAS", "World"],
@@ -47,8 +37,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "weight_file",
             default_value="yolo26x.pt",       # YOLOv26
-            # default_value="yolo11n-pose.pt",  # KeyPoint model
-            # default_value="yolo11n-seg.pt",   # Segmentation
+            # default_value="yolo26x-pose.pt",  # KeyPoint model
+            # default_value="yolo26x-seg.pt",   # Segmentation
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file path",
         ),
