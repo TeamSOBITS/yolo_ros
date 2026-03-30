@@ -7,6 +7,8 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 from sobits_interfaces.msg import KeyPointArray, DetectMaskArray
 
+from ultralytics import YOLO
+
 class YoloNode(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("yolo_ros")
@@ -23,6 +25,7 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("yoloe_prompts", [""])
 
         self.cv_bridge = CvBridge()
+        self.model = None
 
         self._pub_img = None
         self._pub_rect = None
@@ -50,6 +53,13 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"Filter Classes : {self.filter_classes}")
         self.get_logger().info(f"YOLOE Prompts  : {self.yoloe_prompts}")
 
+        try:
+            model_full_path = os.path.join(self.weights_path, self.weight_file)
+            self.model = YOLO(model_full_path)
+        except Exception as e:
+            self.get_logger().error(f"Failed to load model: {e}")
+            return TransitionCallbackReturn.FAILURE
+
         self._pub_img = self.create_lifecycle_publisher(Image, self.get_name() + "/detected_image", 1)
         self._pub_rect = self.create_lifecycle_publisher(Detection2DArray, self.get_name() + "/object_boxes", 1)
         self._pub_keypoint = self.create_lifecycle_publisher(KeyPointArray, self.get_name() + "/object_keypoints", 1)
@@ -62,6 +72,7 @@ class YoloNode(LifecycleNode):
         self.destroy_lifecycle_publisher(self._pub_rect)
         self.destroy_lifecycle_publisher(self._pub_keypoint)
         self.destroy_lifecycle_publisher(self._pub_mask)
+        self.model = None
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
