@@ -14,7 +14,7 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("weight_file", "yolo26n.pt")
         self.declare_parameter("weights_path", "")
         self.declare_parameter("execute_default", True)
-        self.declare_parameter("threshold", 0.35)
+        self.declare_parameter("conf", 0.35)
         self.declare_parameter("iou", 0.7)
 
         self.cv_bridge = CvBridge()
@@ -29,15 +29,15 @@ class YoloNode(LifecycleNode):
         self.weight_file = self.get_parameter("weight_file").get_parameter_value().string_value
         self.weights_path = self.get_parameter("weights_path").get_parameter_value().string_value
         self.enable = self.get_parameter("execute_default").get_parameter_value().bool_value
-        self.threshold = self.get_parameter("threshold").get_parameter_value().double_value
+        self.conf = self.get_parameter("conf").get_parameter_value().double_value
         self.iou = self.get_parameter("iou").get_parameter_value().double_value
 
         self.get_logger().info(f"Image topic name: {self.image_topic_name}")
         self.get_logger().info(f"Weight file: {self.weight_file}")
         self.get_logger().info(f"Weights path: {self.weights_path}")
         self.get_logger().info(f"Execute default: {self.enable}")
-        self.get_logger().info(f"Threshold: {self.threshold}")
-        self.get_logger().info(f"IoU: {self.iou}")
+        self.get_logger().info(f"Confidence threshold: {self.conf}")
+        self.get_logger().info(f"IoU threshold: {self.iou}")
 
         self._pub_img = self.create_lifecycle_publisher(Image, self.get_name() + "/detected_image", 1)
         self._pub_rect = self.create_lifecycle_publisher(Detection2DArray, self.get_name() + "/object_boxes", 1)
