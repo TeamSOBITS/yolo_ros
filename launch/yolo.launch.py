@@ -11,6 +11,7 @@ from launch.conditions import IfCondition
 def generate_launch_description():
     image_topic_name = LaunchConfiguration("image_topic_name")
     model_type = LaunchConfiguration("model_type")
+    weights_path = LaunchConfiguration("weights_path")
     weight_file = LaunchConfiguration("weight_file")
     execute_default = LaunchConfiguration("execute_default")
     image_show = LaunchConfiguration("image_show")
@@ -29,23 +30,23 @@ def generate_launch_description():
             # default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
+            "weights_path",
+            default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights"),
+            description="Directory path where weight files are stored",
+        ),
+        DeclareLaunchArgument(
             "weight_file",
             default_value="yolo26n.pt",       # YOLOv26
             # default_value="yolo26n-pose.pt",  # KeyPoint model
             # default_value="yolo26n-seg.pt",   # Segmentation
             # default_value="yoloe-26n-seg",   # YOLOE
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
-            description="Weight file path",
+            description="Weight file name",
         ),
         DeclareLaunchArgument(
             "execute_default",
             default_value="True",
             description="Whether to start YOLO enabled",
-        ),
-        DeclareLaunchArgument(
-            "image_show",
-            default_value="False",
-            description="Flag to show image with predictions",
         ),
         DeclareLaunchArgument(
             "threshold",
@@ -95,6 +96,7 @@ def generate_launch_description():
         parameters=[
             {
                 "model_type": model_type,
+                "weights_path": weights_path,
                 "weight_file": weight_file,
                 "execute_default": execute_default,
                 "image_topic_name": image_topic_name,
