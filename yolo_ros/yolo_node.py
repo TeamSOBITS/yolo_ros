@@ -4,7 +4,7 @@ import os
 import rclpy
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
-from rclpy.parameter import Parameter
+from rcl_interfaces.msg import SetParametersResult
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import Image
@@ -99,7 +99,7 @@ class YoloNode(LifecycleNode):
             elif param.name == "iou":
                 self.iou = param.value
 
-        return TransitionCallbackReturn(successful=success)
+        return SetParametersResult(successful=success)
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Activating...")
@@ -153,7 +153,10 @@ class YoloNode(LifecycleNode):
             label = result.names[int(box.cls)]
             score = float(box.conf)
 
-            if self.filter_classes != [""] and label not in self.filter_classes:
+            if (self.filter_classes != [""] and
+                label not in self.filter_classes and
+                not hasattr(self.model, "set_classes") and
+                result.keypoints is None):
                 continue
 
             det = Detection2D(header=header)
@@ -184,9 +187,13 @@ class YoloNode(LifecycleNode):
                 mask_array.masks.append(mask)
 
         self._pub_img.publish(det_img)
-        self._pub_rect.publish(det_array)
-        self._pub_keypoint.publish(kp_array)
-        self._pub_mask.publish(mask_array)
+
+        if len(det_array.detections) > 0:
+            self._pub_rect.publish(det_array)
+        if len(kp_array.key_points_array) > 0:
+            self._pub_keypoint.publish(kp_array)
+        if len(mask_array.masks) > 0:
+            self._pub_mask.publish(mask_array)
 
 
 def main(args=None):
@@ -203,7 +210,6 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
