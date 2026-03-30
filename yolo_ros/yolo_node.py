@@ -1,3 +1,4 @@
+import os
 import rclpy
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
 from cv_bridge import CvBridge
@@ -17,6 +18,10 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("conf", 0.35)
         self.declare_parameter("iou", 0.7)
 
+        self.declare_parameter("filter_classes", [""])
+        self.declare_parameter("keypoint_name_list", [""])
+        self.declare_parameter("yoloe_prompts", [""])
+
         self.cv_bridge = CvBridge()
 
         self._pub_img = None
@@ -32,12 +37,19 @@ class YoloNode(LifecycleNode):
         self.conf = self.get_parameter("conf").get_parameter_value().double_value
         self.iou = self.get_parameter("iou").get_parameter_value().double_value
 
+        self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
+        self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
+        self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
+
         self.get_logger().info(f"Image topic name: {self.image_topic_name}")
         self.get_logger().info(f"Weight file: {self.weight_file}")
         self.get_logger().info(f"Weights path: {self.weights_path}")
         self.get_logger().info(f"Execute default: {self.enable}")
         self.get_logger().info(f"Confidence threshold: {self.conf}")
         self.get_logger().info(f"IoU threshold: {self.iou}")
+        self.get_logger().info(f"Filter classes: {self.filter_classes}")
+        self.get_logger().info(f"Keypoint names: {self.keypoint_name_list}")
+        self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
 
         self._pub_img = self.create_lifecycle_publisher(Image, self.get_name() + "/detected_image", 1)
         self._pub_rect = self.create_lifecycle_publisher(Detection2DArray, self.get_name() + "/object_boxes", 1)
@@ -67,7 +79,6 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
