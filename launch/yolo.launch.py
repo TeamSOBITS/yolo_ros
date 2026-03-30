@@ -29,16 +29,11 @@ def generate_launch_description():
             # default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
-            "model_type",
-            default_value="YOLO",
-            choices=["YOLO", "NAS", "World"],
-            description="Model type from Ultralytics (YOLO, NAS, World)",
-        ),
-        DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo26x.pt",       # YOLOv26
-            # default_value="yolo26x-pose.pt",  # KeyPoint model
-            # default_value="yolo26x-seg.pt",   # Segmentation
+            default_value="yolo26n.pt",       # YOLOv26
+            # default_value="yolo26n-pose.pt",  # KeyPoint model
+            # default_value="yolo26n-seg.pt",   # Segmentation
+            # default_value="yoloe-26n-seg",   # YOLOE
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file path",
         ),
@@ -74,15 +69,21 @@ def generate_launch_description():
         ),
     ]
 
-    class_list = os.path.join(
+    yoloe_prompts = os.path.join(
         get_package_share_directory("yolo_ros"),
-        "yolo_world_classes",
-        "class_list.yaml"
+        "config",
+        "yoloe_prompts.yaml"
+    )
+
+    detection_filters = os.path.join(
+        get_package_share_directory("yolo_ros"),
+        "config",
+        "detection_filters.yaml"
     )
 
     keypoint_dictionary = os.path.join(
         get_package_share_directory("yolo_ros"),
-        "keypoints",
+        "config",
         "key_point_dictionary.yaml"
     )
 
@@ -99,15 +100,9 @@ def generate_launch_description():
                 "image_topic_name": image_topic_name,
                 "threshold": threshold,
                 "iou": iou,
-                "imgsz_height": 480,
-                "imgsz_width": 640,
-                "half": False,
-                "max_det": 300,
-                "agnostic_nms": False,
-                "retina_masks": False,
-                "image_show": image_show,
             },
-            class_list,
+            yoloe_prompts,
+            detection_filters,
             keypoint_dictionary,
         ],
         output="screen"
