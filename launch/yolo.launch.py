@@ -9,15 +9,13 @@ from launch.conditions import IfCondition
 
 
 def generate_launch_description():
+    namespace = LaunchConfiguration("namespace")
     image_topic_name = LaunchConfiguration("image_topic_name")
-    model_type = LaunchConfiguration("model_type")
-    weights_path = LaunchConfiguration("weights_path")
     weight_file = LaunchConfiguration("weight_file")
+    weights_path = LaunchConfiguration("weights_path")
     execute_default = LaunchConfiguration("execute_default")
-    image_show = LaunchConfiguration("image_show")
     threshold = LaunchConfiguration("threshold")
     iou = LaunchConfiguration("iou")
-    namespace = LaunchConfiguration("namespace")
     use_3d = LaunchConfiguration("use_3d")
 
     launch_args = [
@@ -95,7 +93,6 @@ def generate_launch_description():
         namespace=namespace,
         parameters=[
             {
-                "model_type": model_type,
                 "weight_file": weight_file,
                 "weights_path": weights_path,
                 "execute_default": execute_default,
