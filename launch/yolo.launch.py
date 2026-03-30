@@ -36,7 +36,7 @@ def generate_launch_description():
             # default_value="yolo26n.pt",       # YOLOv26
             # default_value="yolo26n-pose.pt",  # KeyPoint model
             # default_value="yolo26n-seg.pt",   # Segmentation
-            default_value="yoloe-26n-seg",   # YOLOE
+            default_value="yoloe-26n-seg.pt",   # YOLOE
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file name",
         ),
