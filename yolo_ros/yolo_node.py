@@ -61,6 +61,8 @@ class YoloNode(LifecycleNode):
         try:
             model_full_path = os.path.join(self.weights_path, self.weight_file)
             self.model = YOLO(model_full_path)
+            if hasattr(self.model, "set_classes"):
+                self.model.set_classes(self.yoloe_prompts)
         except Exception as e:
             self.get_logger().error(f"Failed to load model: {e}")
             return TransitionCallbackReturn.FAILURE
@@ -108,8 +110,6 @@ class YoloNode(LifecycleNode):
         self.convert_to_ros_msg(results, msg.header)
 
     def predict(self, cv_image):
-        if hasattr(self.model, "set_classes"):
-            self.model.set_classes(self.yoloe_prompts)
         results = self.model.predict(
             source=cv_image,
             conf=self.conf,
