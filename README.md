@@ -77,7 +77,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
    ```
 
 ## 実行・操作方法
-1. カメラを起動し，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える．
+1. カメラを起動し，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/jazzy-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える．
 
     ```sh
     ros2 launch yolo_ros yolo.launch.py
@@ -91,10 +91,8 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
     ros2 launch yolo_ros yolo.launch.py use_3d:=True
     ```
 
-
-
 ## パラメーター
-以下は[yolo.launch.py](launch/yolo.launch.py)およびノードで設定可能な主なパラメーターです．
+以下は[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/jazzy-devel/launch/yolo.launch.py)およびノードで設定可能な主なパラメーターです．
 詳細は[Ultralytics Predict](https://docs.ultralytics.com/modes/predict/#inference-arguments)も参照してください．
 
 | パラメーター名            | 型            | 説明                               |
@@ -110,11 +108,34 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 | yoloe_prompts      | string_array | YOLOEで使用する検出プロンプト                |
 
 ## デモ
-| 物体検出 | 姿勢推定 | インスタンスセグメンテーション |
+| 物体検出 | 姿勢推定 | セグメンテーション |
 |:---:|:---:|:---:|
 | ![](docs/yolo26n.jpg) | ![](docs/yolo26n-pose.jpg) | ![](docs/yoloe-26n-seg.jpg) |
 
+### Detection
+  ```bash
+  ros2 param set /yolo_ros weight_file "yolo26n.pt"
+  ros2 param set /yolo_ros filter_classes "['person', 'laptop']"
+  ros2 param set /yolo_ros filter_classes "['']"
+  ```
 
+### Pose
+```bash
+ros2 param set /yolo_ros weight_file "yolo26n-pose.pt"
+```
+
+### Segmentation
+```bash
+ros2 param set /yolo_ros weight_file "yolo26n-seg.pt"
+ros2 param set /yolo_ros filter_classes "['person', 'laptop']"
+ros2 param set /yolo_ros filter_classes "['']"
+```
+
+### YOLOE Segmentation
+```bash
+ros2 param set /yolo_ros weight_file "yoloe-26n-seg.pt"
+ros2 param set /yolo_ros yoloe_prompts "['bottle', 'laptop']"
+```
 
 ## 参考文献
 * [Ultralytics Documentation](https://docs.ultralytics.com/)
