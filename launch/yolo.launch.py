@@ -7,7 +7,6 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
 
-
 def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
     image_topic_name = LaunchConfiguration("image_topic_name")
@@ -19,6 +18,11 @@ def generate_launch_description():
     use_3d = LaunchConfiguration("use_3d")
 
     launch_args = [
+        DeclareLaunchArgument(
+            "namespace",
+            default_value="",
+            description="Namespace for the nodes",
+        ),
         DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
@@ -57,11 +61,6 @@ def generate_launch_description():
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
-            "namespace",
-            default_value="",
-            description="Namespace for the nodes",
-        ),
-        DeclareLaunchArgument(
             "use_3d",
             default_value="True",
             description="Whether to activate 3D detections",
@@ -93,10 +92,10 @@ def generate_launch_description():
         namespace=namespace,
         parameters=[
             {
+                "image_topic_name": image_topic_name,
                 "weight_file": weight_file,
                 "weights_path": weights_path,
                 "execute_default": execute_default,
-                "image_topic_name": image_topic_name,
                 "threshold": threshold,
                 "iou": iou,
             },
