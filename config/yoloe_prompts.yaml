@@ -1,0 +1,6 @@
+/**/yolo_ros:
+  ros__parameters:
+    yoloe_prompts:
+      - "person"
+      - "snack"
+      - "handbag"
