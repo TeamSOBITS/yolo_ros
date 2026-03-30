@@ -1,5 +1,3 @@
-# yolo_ros/yolo_ros/yolo_node.py
-
 import os
 import rclpy
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
@@ -160,6 +158,7 @@ class YoloNode(LifecycleNode):
                 continue
 
             det = Detection2D(header=header)
+            det.id = label
             det.bbox.center.position.x = float(box.xywh[0][0])
             det.bbox.center.position.y = float(box.xywh[0][1])
             det.bbox.size_x = float(box.xywh[0][2])
