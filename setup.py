@@ -11,17 +11,16 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'weights'), glob('weights/*')),
-        (os.path.join('share', package_name, 'yolo_world_classes'), glob('yolo_world_classes/*')),
-        (os.path.join('share', package_name, 'keypoints'), glob('keypoints/*')),
+        (os.path.join("share", package_name, "launch"), glob("launch/*.py")),
+        (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
+        (os.path.join("share", package_name, "weights"), glob("weights/*")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="Miguel Ángel González Santamarta",
-    maintainer_email="mgons@unileon.es",
+    maintainer="sobits",
+    maintainer_email="yasumasashige790@gmail.com",
     description="YOLO for ROS 2",
-    license="GPL-3",
+    license="BSD",
     entry_points={
         "console_scripts": [
             "yolo_node = yolo_ros.yolo_node:main",
