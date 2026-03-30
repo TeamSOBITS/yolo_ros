@@ -1,6 +1,0 @@
-yolo_ros/yolo_node:
-  ros__parameters:
-    classes:
-      - "person"
-      - "snack"
-      - "handbag"
