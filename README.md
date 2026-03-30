@@ -82,13 +82,13 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 <!-- 実行・操作方法 -->
 ## 実行・操作方法
 1. カメラを起動し，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える．
-   
+
    例
    ```sh
    default_value="/camera/color/image_raw"          # orbbec_series
    ```
 2. RGBDカメラを使用する場合は，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/humble-devel/launch/yolo.launch.py)の**point_cloud_topic**も使用するカメラの点群のトピック名に書き換える．
-   
+
    例
    ```sh
    default_value="/camera/depth_registered/points"     # orbbec_series
@@ -151,7 +151,7 @@ yolo_rosのすべてのノードはライフサイクルノードをサポート
 ## デモ
 | 物体検出 | 姿勢推定 | インスタンスセグメンテーション |
 |:---:|:---:|:---:|
-| ![](docs/yolo11n.jpg) | ![](docs/yolo11n-pose.jpg) | ![](docs/yoloe-11s-seg.jpg) |
+| ![](docs/yolo26n.jpg) | ![](docs/yolo26n-pose.jpg) | ![](docs/yoloe-26n-seg.jpg) |
 
 
 
