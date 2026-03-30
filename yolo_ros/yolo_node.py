@@ -1,7 +1,10 @@
+# yolo_ros/yolo_ros/yolo_node.py
+
 import os
 import rclpy
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
+from rclpy.parameter import Parameter
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import Image
@@ -35,6 +38,8 @@ class YoloNode(LifecycleNode):
         self._pub_keypoint = None
         self._pub_mask = None
 
+        self.add_on_set_parameters_callback(self.parameters_callback)
+
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Configure...")
 
@@ -49,22 +54,7 @@ class YoloNode(LifecycleNode):
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
         self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
 
-        self.get_logger().info("(YOLO Parameters)")
-        self.get_logger().info(f"Image Topic    : {self.image_topic_name}")
-        self.get_logger().info(f"Weight File    : {self.weight_file}")
-        self.get_logger().info(f"Execute Default: {self.enable}")
-        self.get_logger().info(f"Conf           : {self.conf}")
-        self.get_logger().info(f"IoU            : {self.iou}")
-        self.get_logger().info(f"Filter Classes : {self.filter_classes}")
-        self.get_logger().info(f"YOLOE Prompts  : {self.yoloe_prompts}")
-
-        try:
-            model_full_path = os.path.join(self.weights_path, self.weight_file)
-            self.model = YOLO(model_full_path)
-            if hasattr(self.model, "set_classes"):
-                self.model.set_classes(self.yoloe_prompts)
-        except Exception as e:
-            self.get_logger().error(f"Failed to load model: {e}")
+        if not self.load_model():
             return TransitionCallbackReturn.FAILURE
 
         self.image_qos_profile = QoSProfile(
@@ -80,6 +70,36 @@ class YoloNode(LifecycleNode):
         self._pub_mask = self.create_lifecycle_publisher(DetectMaskArray, self.get_name() + "/object_masks", 1)
 
         return TransitionCallbackReturn.SUCCESS
+
+    def load_model(self):
+        try:
+            model_full_path = os.path.join(self.weights_path, self.weight_file)
+            self.get_logger().info(f"Loading model: {model_full_path}")
+            self.model = YOLO(model_full_path)
+            if hasattr(self.model, "set_classes"):
+                self.model.set_classes(self.yoloe_prompts)
+            return True
+        except Exception as e:
+            self.get_logger().error(f"Failed to load model: {e}")
+            return False
+
+    def parameters_callback(self, params):
+        success = True
+        for param in params:
+            if param.name == "weight_file":
+                self.weight_file = param.value
+                success = self.load_model()
+            elif param.name == "yoloe_prompts":
+                self.yoloe_prompts = param.value
+                success = self.load_model()
+            elif param.name == "filter_classes":
+                self.filter_classes = param.value
+            elif param.name == "conf":
+                self.conf = param.value
+            elif param.name == "iou":
+                self.iou = param.value
+
+        return TransitionCallbackReturn(successful=success)
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Activating...")
