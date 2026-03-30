@@ -1,6 +1,7 @@
 import os
 import rclpy
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
+from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import Image
@@ -26,6 +27,7 @@ class YoloNode(LifecycleNode):
 
         self.cv_bridge = CvBridge()
         self.model = None
+        self._sub = None
 
         self._pub_img = None
         self._pub_rect = None
@@ -33,6 +35,8 @@ class YoloNode(LifecycleNode):
         self._pub_mask = None
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
+        self.get_logger().info("Configure...")
+
         self.image_topic_name = self.get_parameter("image_topic_name").get_parameter_value().string_value
         self.weight_file = self.get_parameter("weight_file").get_parameter_value().string_value
         self.weights_path = self.get_parameter("weights_path").get_parameter_value().string_value
@@ -55,10 +59,18 @@ class YoloNode(LifecycleNode):
 
         try:
             model_full_path = os.path.join(self.weights_path, self.weight_file)
+            self.get_logger().info(f"Loading model: {model_full_path}")
             self.model = YOLO(model_full_path)
         except Exception as e:
             self.get_logger().error(f"Failed to load model: {e}")
             return TransitionCallbackReturn.FAILURE
+
+        self.image_qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            depth=1,
+        )
 
         self._pub_img = self.create_lifecycle_publisher(Image, self.get_name() + "/detected_image", 1)
         self._pub_rect = self.create_lifecycle_publisher(Detection2DArray, self.get_name() + "/object_boxes", 1)
@@ -66,6 +78,19 @@ class YoloNode(LifecycleNode):
         self._pub_mask = self.create_lifecycle_publisher(DetectMaskArray, self.get_name() + "/object_masks", 1)
 
         return TransitionCallbackReturn.SUCCESS
+
+    def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        self.get_logger().info("Activating...")
+
+        self._sub = self.create_subscription(Image, self.image_topic_name, self.image_cb, self.image_qos_profile)
+        return super().on_activate(state)
+
+    def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        self.get_logger().info("Deactivating...")
+
+        self.destroy_subscription(self._sub)
+        self._sub = None
+        return super().on_deactivate(state)
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.destroy_lifecycle_publisher(self._pub_img)
@@ -79,6 +104,9 @@ class YoloNode(LifecycleNode):
         self.on_cleanup(state)
         return TransitionCallbackReturn.SUCCESS
 
+    def image_cb(self, msg: Image) -> None:
+        self.get_logger().info("Image received", throttle_duration_sec=1.0)
+
 def main(args=None):
     rclpy.init(args=args)
     node = YoloNode()
@@ -86,6 +114,7 @@ def main(args=None):
     execute_default = node.get_parameter("execute_default").get_parameter_value().bool_value
     if execute_default:
         node.trigger_configure()
+        node.trigger_activate()
 
     try:
         rclpy.spin(node)
