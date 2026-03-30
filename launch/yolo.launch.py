@@ -13,7 +13,7 @@ def generate_launch_description():
     weight_file = LaunchConfiguration("weight_file")
     weights_path = LaunchConfiguration("weights_path")
     execute_default = LaunchConfiguration("execute_default")
-    threshold = LaunchConfiguration("threshold")
+    conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
     use_3d = LaunchConfiguration("use_3d")
 
@@ -51,7 +51,7 @@ def generate_launch_description():
             description="Whether to start YOLO enabled",
         ),
         DeclareLaunchArgument(
-            "threshold",
+            "conf",
             default_value="0.35",
             description="Minimum probability of a detection to be published",
         ),
@@ -96,7 +96,7 @@ def generate_launch_description():
                 "weight_file": weight_file,
                 "weights_path": weights_path,
                 "execute_default": execute_default,
-                "threshold": threshold,
+                "conf": conf,
                 "iou": iou,
             },
             yoloe_prompts,
