@@ -5,8 +5,9 @@ from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReli
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import Image
-from vision_msgs.msg import Detection2DArray
-from sobits_interfaces.msg import KeyPointArray, DetectMaskArray
+from geometry_msgs.msg import Point
+from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose
+from sobits_interfaces.msg import KeyPointArray, KeyPoint, DetectMaskArray, DetectMask
 
 from ultralytics import YOLO
 
@@ -59,7 +60,6 @@ class YoloNode(LifecycleNode):
 
         try:
             model_full_path = os.path.join(self.weights_path, self.weight_file)
-            self.get_logger().info(f"Loading model: {model_full_path}")
             self.model = YOLO(model_full_path)
         except Exception as e:
             self.get_logger().error(f"Failed to load model: {e}")
@@ -81,13 +81,11 @@ class YoloNode(LifecycleNode):
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Activating...")
-
-        self._sub = self.create_subscription(Image, self.image_topic_name, self.image_cb, self.image_qos_profile)
+        self._sub = self.create_subscription(Image, self.image_topic_name, self.image_callback, self.image_qos_profile)
         return super().on_activate(state)
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Deactivating...")
-
         self.destroy_subscription(self._sub)
         self._sub = None
         return super().on_deactivate(state)
@@ -104,8 +102,72 @@ class YoloNode(LifecycleNode):
         self.on_cleanup(state)
         return TransitionCallbackReturn.SUCCESS
 
-    def image_cb(self, msg: Image) -> None:
-        self.get_logger().info("Image received", throttle_duration_sec=1.0)
+    def image_callback(self, msg):
+        cv_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        results = self.predict(cv_img)
+        self.convert_to_ros_msg(results, msg.header)
+
+    def predict(self, cv_image):
+        if hasattr(self.model, "set_classes"):
+            self.model.set_classes(self.yoloe_prompts)
+        results = self.model.predict(
+            source=cv_image,
+            conf=self.conf,
+            iou=self.iou,
+            verbose=False
+        )
+        return results
+
+    def convert_to_ros_msg(self, results, header):
+        result = results[0]
+
+        annotated_frame = result.plot()
+        det_img = self.cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
+        det_img.header = header
+
+        det_array = Detection2DArray(header=header)
+        kp_array = KeyPointArray(header=header)
+        mask_array = DetectMaskArray(header=header)
+
+        for i, box in enumerate(result.boxes):
+            label = result.names[int(box.cls)]
+            score = float(box.conf)
+
+            if self.filter_classes != [""] and label not in self.filter_classes:
+                continue
+
+            det = Detection2D(header=header)
+            det.bbox.center.position.x = float(box.xywh[0][0])
+            det.bbox.center.position.y = float(box.xywh[0][1])
+            det.bbox.size_x = float(box.xywh[0][2])
+            det.bbox.size_y = float(box.xywh[0][3])
+
+            hyp = ObjectHypothesisWithPose()
+            hyp.hypothesis.class_id = label
+            hyp.hypothesis.score = score
+
+            det.results.append(hyp)
+            det_array.detections.append(det)
+
+            if result.keypoints is not None:
+                kp = KeyPoint(key_names=self.keypoint_name_list, score=score)
+                for p in result.keypoints[i].xy[0]:
+                    pt = Point(x=float(p[0]), y=float(p[1]), z=0.0)
+                    kp.key_points.append(pt)
+                kp_array.key_points_array.append(kp)
+
+            if result.masks is not None:
+                mask = DetectMask(instance_id=label)
+                mask.results.append(hyp)
+                mask.pixel_x = [int(x) for x in result.masks[i].xy[0][:, 0]]
+                mask.pixel_y = [int(y) for y in result.masks[i].xy[0][:, 1]]
+                mask_array.masks.append(mask)
+
+        self._pub_img.publish(det_img)
+        self._pub_rect.publish(det_array)
+        self._pub_keypoint.publish(kp_array)
+        self._pub_mask.publish(mask_array)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -115,7 +177,6 @@ def main(args=None):
     if execute_default:
         node.trigger_configure()
         node.trigger_activate()
-
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
