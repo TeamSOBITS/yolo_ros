@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>YOLO for ROS 2</description>
   <maintainer email="yasumasashige790@gmail.com">yasumasa</maintainer>
-  <license>BSD</license>
+  <license>BSD-3-Clause</license>
 
   <depend>rclpy</depend>
   <depend>cv_bridge</depend>

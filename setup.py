@@ -20,7 +20,7 @@ setup(
     maintainer="sobits",
     maintainer_email="yasumasashige790@gmail.com",
     description="YOLO for ROS 2",
-    license="BSD",
+    license="BSD-3-Clause",
     entry_points={
         "console_scripts": [
             "yolo_node = yolo_ros.yolo_node:main",
