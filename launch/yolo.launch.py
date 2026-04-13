@@ -18,6 +18,7 @@ def generate_launch_description():
     execute_default = LaunchConfiguration("execute_default")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
+    use_mask_3d = LaunchConfiguration("use_mask_3d")
     use_3d = LaunchConfiguration("use_3d")
 
     launch_args = [
@@ -95,6 +96,11 @@ def generate_launch_description():
             default_value="True",
             description="Whether to activate 3D detections",
         ),
+        DeclareLaunchArgument(
+            "use_mask_3d",
+            default_value="False",
+            description="Whether to activate mask_to_3d",
+        ),
     ]
 
     yoloe_prompts = os.path.join(
@@ -168,10 +174,27 @@ def generate_launch_description():
         condition=IfCondition(use_3d),
     )
 
+    mask_to_3d_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("image_to_position"),
+                "launch",
+                "mask_to_3d.launch.py",
+            )
+        ),
+        launch_arguments={
+            "namespace": namespace,
+            "params_file": mask_to_3d_params_file,
+            "execute_default": execute_default,
+        }.items(),
+        condition=IfCondition(use_mask_3d),
+    )
+
     return LaunchDescription(
         launch_args + [
             yolo_node_cmd,
             bbox_to_3d_cmd,
             keypoint_to_3d_cmd,
+            mask_to_3d_cmd,
         ]
     )
