@@ -3,7 +3,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, AndSubstitution
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
 
@@ -12,9 +12,13 @@ def generate_launch_description():
     image_topic_name = LaunchConfiguration("image_topic_name")
     weight_file = LaunchConfiguration("weight_file")
     weights_path = LaunchConfiguration("weights_path")
+    bbox_to_3d_params_file = LaunchConfiguration("bbox_to_3d_params_file")
+    keypoint_to_3d_params_file = LaunchConfiguration("keypoint_to_3d_params_file")
+    mask_to_3d_params_file = LaunchConfiguration("mask_to_3d_params_file")
     execute_default = LaunchConfiguration("execute_default")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
+    use_mask_3d = LaunchConfiguration("use_mask_3d")
     use_3d = LaunchConfiguration("use_3d")
 
     launch_args = [
@@ -46,6 +50,33 @@ def generate_launch_description():
             description="Directory path where weight files are stored",
         ),
         DeclareLaunchArgument(
+            "bbox_to_3d_params_file",
+            default_value=os.path.join(
+                get_package_share_directory("image_to_position"),
+                "config",
+                "bbox_to_3d.yaml",
+            ),
+            description="Parameter file path for bbox_to_3d",
+        ),
+        DeclareLaunchArgument(
+            "keypoint_to_3d_params_file",
+            default_value=os.path.join(
+                get_package_share_directory("image_to_position"),
+                "config",
+                "keypoint_to_3d.yaml",
+            ),
+            description="Parameter file path for keypoint_to_3d",
+        ),
+        DeclareLaunchArgument(
+            "mask_to_3d_params_file",
+            default_value=os.path.join(
+                get_package_share_directory("image_to_position"),
+                "config",
+                "mask_to_3d.yaml",
+            ),
+            description="Parameter file path for mask_to_3d",
+        ),
+        DeclareLaunchArgument(
             "execute_default",
             default_value="True",
             description="Whether to start YOLO enabled",
@@ -64,6 +95,11 @@ def generate_launch_description():
             "use_3d",
             default_value="True",
             description="Whether to activate 3D detections",
+        ),
+        DeclareLaunchArgument(
+            "use_mask_3d",
+            default_value="False",
+            description="Whether to activate mask_to_3d",
         ),
     ]
 
@@ -116,10 +152,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "namespace": namespace,
-            "params_file": os.path.join(
-                get_package_share_directory("image_to_position"), "config",
-                "bbox_to_3d.yaml"
-            ),
+            "params_file": bbox_to_3d_params_file,
             "execute_default": execute_default,
         }.items(),
         condition=IfCondition(use_3d),
@@ -135,13 +168,26 @@ def generate_launch_description():
         ),
         launch_arguments={
             "namespace": namespace,
-            "params_file": os.path.join(
-                get_package_share_directory("image_to_position"), "config",
-                "keypoint_to_3d.yaml"
-            ),
+            "params_file": keypoint_to_3d_params_file,
             "execute_default": execute_default,
         }.items(),
         condition=IfCondition(use_3d),
+    )
+
+    mask_to_3d_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("image_to_position"),
+                "launch",
+                "mask_to_3d.launch.py",
+            )
+        ),
+        launch_arguments={
+            "namespace": namespace,
+            "params_file": mask_to_3d_params_file,
+            "execute_default": execute_default,
+        }.items(),
+        condition=IfCondition(AndSubstitution(use_3d, use_mask_3d)),
     )
 
     return LaunchDescription(
@@ -149,5 +195,6 @@ def generate_launch_description():
             yolo_node_cmd,
             bbox_to_3d_cmd,
             keypoint_to_3d_cmd,
+            mask_to_3d_cmd,
         ]
     )
