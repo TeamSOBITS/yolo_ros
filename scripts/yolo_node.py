@@ -8,6 +8,8 @@ from ultralytics.engine.results import Results
 
 from std_srvs.srv import SetBool, SetBoolResponse
 
+import torch
+
 
 class YoloNode:
     def __init__(self) -> None:
@@ -22,9 +24,15 @@ class YoloNode:
         self.model_path = rospy.get_param("~model_path")
         self.half_bool = rospy.get_param("~half_bool", False)
 
+        if torch.cuda.is_available():
+            device = "cuda"
+            rospy.loginfo("[YoloNode] CUDA is available. Using GPU.")
+        else:
+            device = "cpu"
+            rospy.logwarn("[YoloNode] CUDA is NOT available. Falling back to CPU.")
         # YOLO Model
         # self.model = YOLO(str(self.model_path))
-        self.model = YOLO(str(self.model_path)).to("cuda")
+        self.model = YOLO(str(self.model_path)).to(device)
 
         # Define publishers
         self.result_image_pub = rospy.Publisher("/yolo/result_image", Image)
