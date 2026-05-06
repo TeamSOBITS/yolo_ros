@@ -23,7 +23,7 @@
     </li>
     <li><a href="#実行操作方法">実行・操作方法</a></li>
     <li><a href="#パラメーター">パラメーター</a></li>
-    <li><a href="#run_controll">Run Controll</a></li>
+    <li><a href="#run-control">Run Control</a></li>
     <li><a href="#参考文献">参考文献</a></li>
   </ol>
 </details>
@@ -115,7 +115,7 @@ YOLO ROS は，UltralyticsのYOLOモデルをROSで利用するためのラッ�
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
-## Run Controll
+## Run Control
 
 以下のコマンドで YOLO の推論の ON/OFF を切り替え可能．
 
