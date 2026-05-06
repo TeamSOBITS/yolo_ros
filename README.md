@@ -6,7 +6,7 @@
 [![Issues][issues-shield]][issues-url]
 [![License][license-shield]][license-url]
 
-# Yolo ROS
+# YOLO ROS
 
 <details>
   <summary>目次</summary>
