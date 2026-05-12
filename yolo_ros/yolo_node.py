@@ -174,6 +174,7 @@ class YoloNode(LifecycleNode):
         kp_array = KeyPointArray(header=header)
         mask_array = DetectMaskArray(header=header)
 
+        active_filter_classes = [name for name in self.filter_classes if name]
         for i, box in enumerate(result.boxes):
             cls_value = self._extract_scalar_value(box.cls)
             cls_idx = int(cls_value)
@@ -181,7 +182,6 @@ class YoloNode(LifecycleNode):
             score_value = self._extract_scalar_value(box.conf)
             score = float(score_value)
 
-            active_filter_classes = [name for name in self.filter_classes if name]
             if active_filter_classes and label not in active_filter_classes:
                 continue
 
