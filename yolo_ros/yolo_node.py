@@ -175,9 +175,11 @@ class YoloNode(LifecycleNode):
         mask_array = DetectMaskArray(header=header)
 
         for i, box in enumerate(result.boxes):
-            cls_idx = int(box.cls.item()) if hasattr(box.cls, "item") else int(box.cls[0])
+            cls_value = self._extract_scalar_value(box.cls)
+            cls_idx = int(cls_value)
             label = result.names[cls_idx]
-            score = float(box.conf.item()) if hasattr(box.conf, "item") else float(box.conf[0])
+            score_value = self._extract_scalar_value(box.conf)
+            score = float(score_value)
 
             active_filter_classes = [name for name in self.filter_classes if name]
             if active_filter_classes and label not in active_filter_classes:
@@ -219,6 +221,15 @@ class YoloNode(LifecycleNode):
             self._pub_keypoint.publish(kp_array)
         if len(mask_array.masks) > 0:
             self._pub_mask.publish(mask_array)
+
+    @staticmethod
+    def _extract_scalar_value(value):
+        if hasattr(value, "item"):
+            return value.item()
+        try:
+            return value[0]
+        except (TypeError, IndexError, KeyError):
+            return value
 
 
 def main(args=None):
