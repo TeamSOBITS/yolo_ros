@@ -3,57 +3,75 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, AndSubstitution, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition
 
-
 def generate_launch_description():
-    image_topic_name = LaunchConfiguration("image_topic_name")
-    model_type = LaunchConfiguration("model_type")
-    weight_file = LaunchConfiguration("weight_file")
-    execute_default = LaunchConfiguration("execute_default")
-    image_show = LaunchConfiguration("image_show")
-    threshold = LaunchConfiguration("threshold")
-    iou = LaunchConfiguration("iou")
     namespace = LaunchConfiguration("namespace")
+    image_topic_name = LaunchConfiguration("image_topic_name")
+    weight_file = LaunchConfiguration("weight_file")
+    weights_path = LaunchConfiguration("weights_path")
+    bbox_to_3d_params_file = LaunchConfiguration("bbox_to_3d_params_file")
+    keypoint_to_3d_params_file = LaunchConfiguration("keypoint_to_3d_params_file")
+    mask_to_3d_params_file = LaunchConfiguration("mask_to_3d_params_file")
+    execute_default = LaunchConfiguration("execute_default")
+    conf = LaunchConfiguration("conf")
+    iou = LaunchConfiguration("iou")
+    use_mask_3d = LaunchConfiguration("use_mask_3d")
     use_3d = LaunchConfiguration("use_3d")
 
     launch_args = [
         DeclareLaunchArgument(
-            "image_topic_name",
-            description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
-            default_value="camera/color/image_raw",            ## realsense
-            # default_value="rgb/image_raw",                   ## azure_kinect
-            # default_value="camera/color/image_raw",          ## orbbec_series ##
-            # default_value="camera/rgb/image_raw",            ## xtion
+            "namespace",
+            default_value="",
+            description="Namespace for the nodes",
         ),
         DeclareLaunchArgument(
-            "model_type",
-            default_value="YOLO",
-            choices=["YOLO", "NAS", "World"],
-            description="Model type from Ultralytics (YOLO, NAS, World)",
+            "image_topic_name",
+            description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
+            # default_value="camera/color/image_raw",            ## realsense
+            # default_value="rgb/image_raw",                   ## azure_kinect
+            # default_value="camera/color/image_raw",          ## orbbec_series ##
+            default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo26x.pt",       # YOLOv26
-            # default_value="yolo26x-pose.pt",  # KeyPoint model
-            # default_value="yolo26x-seg.pt",   # Segmentation
+            # default_value="yolo26n.pt",       # YOLOv26
+            default_value="yolo26n-pose.pt",  # KeyPoint model
+            # default_value="yolo26n-seg.pt",   # Segmentation
+            # default_value="yoloe-26n-seg.pt",   # YOLOE
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
-            description="Weight file path",
+            description="Weight file name",
+        ),
+        DeclareLaunchArgument(
+            "weights_path",
+            default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights"),
+            description="Directory path where weight files are stored",
+        ),
+        DeclareLaunchArgument(
+            "bbox_to_3d_params_file",
+            default_value=PathJoinSubstitution([FindPackageShare("image_to_position"), "config", "bbox_to_3d.yaml"]),
+            description="Parameter file path for bbox_to_3d",
+        ),
+        DeclareLaunchArgument(
+            "keypoint_to_3d_params_file",
+            default_value=PathJoinSubstitution([FindPackageShare("image_to_position"), "config", "keypoint_to_3d.yaml"]),
+            description="Parameter file path for keypoint_to_3d",
+        ),
+        DeclareLaunchArgument(
+            "mask_to_3d_params_file",
+            default_value=PathJoinSubstitution([FindPackageShare("image_to_position"), "config", "mask_to_3d.yaml"]),
+            description="Parameter file path for mask_to_3d",
         ),
         DeclareLaunchArgument(
             "execute_default",
             default_value="True",
-            description="Whether to start YOLO enabled",
+            description="Whether to auto-configure and auto-activate the YOLO lifecycle node",
         ),
         DeclareLaunchArgument(
-            "image_show",
-            default_value="False",
-            description="Flag to show image with predictions",
-        ),
-        DeclareLaunchArgument(
-            "threshold",
+            "conf",
             default_value="0.35",
             description="Minimum probability of a detection to be published",
         ),
@@ -63,26 +81,32 @@ def generate_launch_description():
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
-            "namespace",
-            default_value="",
-            description="Namespace for the nodes",
-        ),
-        DeclareLaunchArgument(
             "use_3d",
             default_value="True",
             description="Whether to activate 3D detections",
         ),
+        DeclareLaunchArgument(
+            "use_mask_3d",
+            default_value="False",
+            description="Whether to activate mask_to_3d",
+        ),
     ]
 
-    class_list = os.path.join(
+    yoloe_prompts = os.path.join(
         get_package_share_directory("yolo_ros"),
-        "yolo_world_classes",
-        "class_list.yaml"
+        "config",
+        "yoloe_prompts.yaml"
+    )
+
+    detection_filters = os.path.join(
+        get_package_share_directory("yolo_ros"),
+        "config",
+        "detection_filters.yaml"
     )
 
     keypoint_dictionary = os.path.join(
         get_package_share_directory("yolo_ros"),
-        "keypoints",
+        "config",
         "key_point_dictionary.yaml"
     )
 
@@ -93,21 +117,15 @@ def generate_launch_description():
         namespace=namespace,
         parameters=[
             {
-                "model_type": model_type,
-                "weight_file": weight_file,
-                "execute_default": execute_default,
                 "image_topic_name": image_topic_name,
-                "threshold": threshold,
+                "weight_file": weight_file,
+                "weights_path": weights_path,
+                "execute_default": execute_default,
+                "conf": conf,
                 "iou": iou,
-                "imgsz_height": 480,
-                "imgsz_width": 640,
-                "half": False,
-                "max_det": 300,
-                "agnostic_nms": False,
-                "retina_masks": False,
-                "image_show": image_show,
             },
-            class_list,
+            yoloe_prompts,
+            detection_filters,
             keypoint_dictionary,
         ],
         output="screen"
@@ -115,18 +133,11 @@ def generate_launch_description():
 
     bbox_to_3d_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("image_to_position"),
-                "launch",
-                "bbox_to_3d.launch.py",
-            )
+            PathJoinSubstitution([FindPackageShare("image_to_position"), "launch", "bbox_to_3d.launch.py"])
         ),
         launch_arguments={
             "namespace": namespace,
-            "params_file": os.path.join(
-                get_package_share_directory("image_to_position"), "config",
-                "bbox_to_3d.yaml"
-            ),
+            "params_file": bbox_to_3d_params_file,
             "execute_default": execute_default,
         }.items(),
         condition=IfCondition(use_3d),
@@ -134,21 +145,26 @@ def generate_launch_description():
 
     keypoint_to_3d_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("image_to_position"),
-                "launch",
-                "keypoint_to_3d.launch.py",
-            )
+            PathJoinSubstitution([FindPackageShare("image_to_position"), "launch", "keypoint_to_3d.launch.py"])
         ),
         launch_arguments={
             "namespace": namespace,
-            "params_file": os.path.join(
-                get_package_share_directory("image_to_position"), "config",
-                "keypoint_to_3d.yaml"
-            ),
+            "params_file": keypoint_to_3d_params_file,
             "execute_default": execute_default,
         }.items(),
         condition=IfCondition(use_3d),
+    )
+
+    mask_to_3d_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([FindPackageShare("image_to_position"), "launch", "mask_to_3d.launch.py"])
+        ),
+        launch_arguments={
+            "namespace": namespace,
+            "params_file": mask_to_3d_params_file,
+            "execute_default": execute_default,
+        }.items(),
+        condition=IfCondition(AndSubstitution(use_3d, use_mask_3d)),
     )
 
     return LaunchDescription(
@@ -156,5 +172,6 @@ def generate_launch_description():
             yolo_node_cmd,
             bbox_to_3d_cmd,
             keypoint_to_3d_cmd,
+            mask_to_3d_cmd,
         ]
     )

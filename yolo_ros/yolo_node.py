@@ -1,73 +1,58 @@
-import cv2
+import os
+import rclpy
+from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
+from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
+from rcl_interfaces.msg import SetParametersResult
 from cv_bridge import CvBridge
 
-import rclpy
-from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
-from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
-
-from ultralytics import YOLO, NAS, YOLOWorld
-from ultralytics.engine.results import Results
-
-from geometry_msgs.msg import Point, Quaternion
-from std_srvs.srv import SetBool
-from sobits_interfaces.msg import KeyPoint, KeyPointArray
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import Point
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose
+from sobits_interfaces.msg import KeyPointArray, KeyPoint, DetectMaskArray, DetectMask
 
+from ultralytics import YOLO
 
 class YoloNode(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("yolo_ros")
 
-        self.declare_parameter("model_type", "YOLO")
-        self.declare_parameter("weight_file", "yolov8m.pt")
-        self.declare_parameter("image_topic_name", "image_raw")
-        self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("iou", 0.5)
-        self.declare_parameter("imgsz_height", 480)
-        self.declare_parameter("imgsz_width", 640)
-        self.declare_parameter("half", False)
-        self.declare_parameter("max_det", 300)
-        self.declare_parameter("agnostic_nms", False)
-        self.declare_parameter("retina_masks", False)
-        self.declare_parameter("image_show", False)
+        self.declare_parameter("image_topic_name", "camera/color/image_raw")
+        self.declare_parameter("weight_file", "yolo26n.pt")
+        self.declare_parameter("weights_path", "")
         self.declare_parameter("execute_default", True)
-        self.declare_parameter("classes", [""])
-        self.declare_parameter("keypoint_name_list", [""])
+        self.declare_parameter("conf", 0.35)
+        self.declare_parameter("iou", 0.7)
 
-        self.type_to_model = {"YOLO": YOLO, "NAS": NAS, "World": YOLOWorld}
+        self.declare_parameter("filter_classes", [""])
+        self.declare_parameter("keypoint_name_list", [""])
+        self.declare_parameter("yoloe_prompts", [""])
+
+        self.cv_bridge = CvBridge()
+        self.model = None
+        self._sub = None
+
+        self._pub_img = None
+        self._pub_rect = None
+        self._pub_keypoint = None
+        self._pub_mask = None
+
+        self.add_on_set_parameters_callback(self.parameters_callback)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.model_type = self.get_parameter("model_type").get_parameter_value().string_value
-        self.model = self.get_parameter("weight_file").get_parameter_value().string_value
-        self.image_topic_name = self.get_parameter("image_topic_name").get_parameter_value().string_value
-        self.threshold = self.get_parameter("threshold").get_parameter_value().double_value
-        self.iou = self.get_parameter("iou").get_parameter_value().double_value
-        self.imgsz_height = self.get_parameter("imgsz_height").get_parameter_value().integer_value
-        self.imgsz_width = self.get_parameter("imgsz_width").get_parameter_value().integer_value
-        self.half = self.get_parameter("half").get_parameter_value().bool_value
-        self.max_det = self.get_parameter("max_det").get_parameter_value().integer_value
-        self.agnostic_nms = self.get_parameter("agnostic_nms").get_parameter_value().bool_value
-        self.retina_masks = self.get_parameter("retina_masks").get_parameter_value().bool_value
-        self.image_show = self.get_parameter("image_show").get_parameter_value().bool_value
-        self.enable = self.get_parameter("execute_default").get_parameter_value().bool_value
-        self.classes = self.get_parameter("classes").get_parameter_value().string_array_value
-        self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
+        self.get_logger().info("Configure...")
 
-        self.get_logger().info(f"Model type: {self.model_type}")
-        self.get_logger().info(f"Weight file: {self.model}")
-        self.get_logger().info(f"Image topic name: {self.image_topic_name}")
-        self.get_logger().info(f"Threshold: {self.threshold}")
-        self.get_logger().info(f"IoU: {self.iou}")
-        self.get_logger().info(f"Image size: ({self.imgsz_height}, {self.imgsz_width})")
-        self.get_logger().info(f"Half precision: {self.half}")
-        self.get_logger().info(f"Max detections: {self.max_det}")
-        self.get_logger().info(f"Agnostic NMS: {self.agnostic_nms}")
-        self.get_logger().info(f"Retina masks: {self.retina_masks}")
-        self.get_logger().info(f"Show image: {self.image_show}")
-        self.get_logger().info(f"Execute default: {self.enable}")
-        self.get_logger().info(f"Classes: {self.classes}")
-        self.get_logger().info(f"Keypoint names: {self.keypoint_name_list}")
+        self.image_topic_name = self.get_parameter("image_topic_name").get_parameter_value().string_value
+        self.weight_file = self.get_parameter("weight_file").get_parameter_value().string_value
+        self.weights_path = self.get_parameter("weights_path").get_parameter_value().string_value
+        self.conf = self.get_parameter("conf").get_parameter_value().double_value
+        self.iou = self.get_parameter("iou").get_parameter_value().double_value
+
+        self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
+        self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
+        self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
+
+        if not self.load_model():
+            return TransitionCallbackReturn.FAILURE
 
         self.image_qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -75,179 +60,188 @@ class YoloNode(LifecycleNode):
             durability=QoSDurabilityPolicy.VOLATILE,
             depth=1,
         )
-        self._pub_rect = self.create_lifecycle_publisher(
-            Detection2DArray, self.get_name() + "/object_boxes", 1
-        )
-        self._pub_keypoint = self.create_lifecycle_publisher(
-            KeyPointArray, self.get_name() + "/object_keypoints", 1
-        )
-        self._pub_img = self.create_lifecycle_publisher(
-            Image, self.get_name() + "/detected_image", 1
-        )
 
-        self.cv_bridge = CvBridge()
+        self._pub_img = self.create_lifecycle_publisher(Image, self.get_name() + "/detected_image", 1)
+        self._pub_rect = self.create_lifecycle_publisher(Detection2DArray, self.get_name() + "/object_boxes", 1)
+        self._pub_keypoint = self.create_lifecycle_publisher(KeyPointArray, self.get_name() + "/object_keypoints", 1)
+        self._pub_mask = self.create_lifecycle_publisher(DetectMaskArray, self.get_name() + "/object_masks", 1)
 
-        super().on_configure(state)
         return TransitionCallbackReturn.SUCCESS
+
+    def load_model(self, weight_file=None, weights_path=None, yoloe_prompts=None):
+        try:
+            model_weight_file = self.weight_file if weight_file is None else weight_file
+            model_weights_path = self.weights_path if weights_path is None else weights_path
+            model_yoloe_prompts = self.yoloe_prompts if yoloe_prompts is None else yoloe_prompts
+            model_full_path = os.path.join(model_weights_path, model_weight_file)
+            self.get_logger().info(f"Loading model: {model_full_path}")
+            model = YOLO(model_full_path)
+            if hasattr(model, "set_classes"):
+                model.set_classes(model_yoloe_prompts)
+            self.model = model
+            return True
+        except Exception as e:
+            self.get_logger().error(f"Failed to load model: {e}")
+            return False
+
+    def parameters_callback(self, params):
+        next_weight_file = self.weight_file
+        next_weights_path = self.weights_path
+        next_yoloe_prompts = self.yoloe_prompts
+        should_reload = False
+
+        for param in params:
+            if param.name == "weight_file":
+                next_weight_file = param.value
+                should_reload = True
+            elif param.name == "weights_path":
+                next_weights_path = param.value
+                should_reload = True
+            elif param.name == "yoloe_prompts":
+                next_yoloe_prompts = param.value
+                should_reload = True
+            elif param.name == "filter_classes":
+                self.filter_classes = param.value
+            elif param.name == "conf":
+                self.conf = param.value
+            elif param.name == "iou":
+                self.iou = param.value
+
+        if should_reload:
+            if not self.load_model(
+                weight_file=next_weight_file,
+                weights_path=next_weights_path,
+                yoloe_prompts=next_yoloe_prompts,
+            ):
+                return SetParametersResult(successful=False)
+            self.weight_file = next_weight_file
+            self.weights_path = next_weights_path
+            self.yoloe_prompts = next_yoloe_prompts
+
+        return SetParametersResult(successful=True)
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        try:
-            self.yolo = self.type_to_model[self.model_type](self.model)
-        except FileNotFoundError:
-            self.get_logger().error(f"Model file '{self.model}' does not exist")
-            return TransitionCallbackReturn.ERROR
-
-        try:
-            self.yolo.fuse()
-        except TypeError as e:
-            self.get_logger().warn(f"Error while fuse: {e}")
-
-        self._enable_srv = self.create_service(SetBool, "run_ctrl", self.enable_cb)
-
-        if isinstance(self.yolo, YOLOWorld):
-            self.yolo.set_classes(self.classes)
-
-        self._sub = self.create_subscription(Image, self.image_topic_name, self.image_cb, self.image_qos_profile)
-
-        super().on_activate(state)
-        return TransitionCallbackReturn.SUCCESS
+        self.get_logger().info("Activating...")
+        self._sub = self.create_subscription(Image, self.image_topic_name, self.image_callback, self.image_qos_profile)
+        return super().on_activate(state)
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        del self.yolo
-        self.destroy_service(self._enable_srv)
-        self._enable_srv = None
+        self.get_logger().info("Deactivating...")
         self.destroy_subscription(self._sub)
         self._sub = None
-        super().on_deactivate(state)
-        return TransitionCallbackReturn.SUCCESS
+        return super().on_deactivate(state)
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.destroy_publisher(self._pub_rect)
-        self.destroy_publisher(self._pub_keypoint)
-        self.destroy_publisher(self._pub_img)
-        del self.image_qos_profile
-        super().on_cleanup(state)
+        self.destroy_lifecycle_publisher(self._pub_img)
+        self.destroy_lifecycle_publisher(self._pub_rect)
+        self.destroy_lifecycle_publisher(self._pub_keypoint)
+        self.destroy_lifecycle_publisher(self._pub_mask)
+        self.model = None
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
-        super().on_cleanup(state)
+        self.on_cleanup(state)
         return TransitionCallbackReturn.SUCCESS
 
-    def enable_cb(self, request: SetBool.Request, response: SetBool.Response) -> SetBool.Response:
-        self.enable = request.data
-        response.success = True
-        self.get_logger().info(f"YOLO {'enabled' if self.enable else 'disabled'}")
-        return response
+    def image_callback(self, msg):
+        cv_img = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        results = self.predict(cv_img)
+        self.convert_to_ros_msg(results, msg.header)
 
-    def image_cb(self, msg: Image) -> None:
-        self.get_logger().debug(f"Received image with encoding: {msg.encoding}")
-        if not self.enable:
-            self.get_logger().debug("YOLO is disabled, skipping image processing")
-            return
-
-        encoding = msg.encoding
-        cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
-
-        if encoding == 'bgr8':
-            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-        elif encoding == 'bgra8':
-            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGRA2RGB)
-        elif encoding == 'rgba8':
-            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_RGBA2RGB)
-        elif encoding == 'rgb8':
-            cv_image_rgb = cv_image
-        else:
-            self.get_logger().error(f"Unsupported encoding: {encoding}")
-            return
-
-        results = self.yolo.predict(
-            source=cv_image_rgb,
-            verbose=False,
-            stream=False,
-            conf=self.threshold,
+    def predict(self, cv_image):
+        results = self.model.predict(
+            source=cv_image,
+            conf=self.conf,
             iou=self.iou,
-            imgsz=(self.imgsz_height, self.imgsz_width),
-            half=self.half,
-            max_det=self.max_det,
-            agnostic_nms=self.agnostic_nms,
-            retina_masks=self.retina_masks,
-            show=self.image_show,
+            verbose=False
         )
-        
-        results: Results = results[0].cpu()
+        return results
 
-        detections_bboxes_msg = Detection2DArray()
-        detections_keypoints_msg = KeyPointArray()
-        header = msg.header
-        detections_bboxes_msg.header = header
-        detections_keypoints_msg.header = header
+    def convert_to_ros_msg(self, results, header):
+        result = results[0]
 
-        for i in range(len(results)):
-            bbox = Detection2D()
-            kp = KeyPoint()
-            bbox.header = header
-            bbox.results = []
-            kp.key_names = []
-            kp.key_points = []
+        annotated_frame = result.plot()
+        det_img = self.cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
+        det_img.header = header
 
-            if results.boxes:
-                box = results.boxes[i].xywh[0]
-                cls_idx = int(results.boxes[i].cls[0])
-                conf = float(results.boxes[i].conf[0])
-                class_name = str(self.yolo.names[cls_idx])
+        det_array = Detection2DArray(header=header)
+        kp_array = KeyPointArray(header=header)
+        mask_array = DetectMaskArray(header=header)
 
-                ohwp = ObjectHypothesisWithPose()
-                ohwp.hypothesis.class_id = class_name
-                ohwp.hypothesis.score = conf
+        active_filter_classes = [name for name in self.filter_classes if name]
+        for i, box in enumerate(result.boxes):
+            cls_value = self._extract_scalar_value(box.cls)
+            cls_idx = int(cls_value)
+            label = result.names[cls_idx]
+            score_value = self._extract_scalar_value(box.conf)
+            score = float(score_value)
 
-                bbox.id = class_name
-                bbox.bbox.center.position.x = float(box[0])
-                bbox.bbox.center.position.y = float(box[1])
-                bbox.bbox.size_x = float(box[2])
-                bbox.bbox.size_y = float(box[3])
-                ohwp.pose.pose.position = Point(x=float(box[0]), y=float(box[1]), z=-1.0)
-                ohwp.pose.pose.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
-                ohwp.pose.covariance = [0.0] * 36
+            if active_filter_classes and label not in active_filter_classes:
+                continue
 
-                bbox.results.append(ohwp)
-                detections_bboxes_msg.detections.append(bbox)
+            det = Detection2D(header=header)
+            det.id = label
+            det.bbox.center.position.x = float(box.xywh[0][0])
+            det.bbox.center.position.y = float(box.xywh[0][1])
+            det.bbox.size_x = float(box.xywh[0][2])
+            det.bbox.size_y = float(box.xywh[0][3])
 
-            if results.keypoints:
-                if results.keypoints[i].conf is None:
-                    continue
-                for kp_id, (p, conf) in enumerate(zip(results.keypoints[i].xy[0], results.keypoints[i].conf[0])):
-                    if conf >= self.threshold:
-                        kp.key_names.append(str(self.keypoint_name_list[kp_id]))
-                        kp.key_points.append(Point(x=float(p[0]), y=float(p[1]), z=-1.0))
-                detections_keypoints_msg.key_points_array.append(kp)
+            hyp = ObjectHypothesisWithPose()
+            hyp.hypothesis.class_id = label
+            hyp.hypothesis.score = score
 
-        if hasattr(results, 'plot'):
-            annotated_image = results.plot()
-            ros_image = self.cv_bridge.cv2_to_imgmsg(annotated_image, "rgb8")
-            ros_image.header = header
-        else:
-            ros_image = self.cv_bridge.cv2_to_imgmsg(cv_image_rgb, "rgb8")
-            ros_image.header = header
+            det.results.append(hyp)
+            det_array.detections.append(det)
 
-        self._pub_rect.publish(detections_bboxes_msg)
-        self._pub_keypoint.publish(detections_keypoints_msg)
-        self._pub_img.publish(ros_image)
+            if result.keypoints is not None:
+                kp = KeyPoint(key_names=self.keypoint_name_list, score=score)
+                for p in result.keypoints[i].xy[0]:
+                    pt = Point(x=float(p[0]), y=float(p[1]), z=0.0)
+                    kp.key_points.append(pt)
+                kp_array.key_points_array.append(kp)
+
+            if result.masks is not None:
+                mask = DetectMask(instance_id=label)
+                mask.results.append(hyp)
+                mask.pixel_x = [int(x) for x in result.masks[i].xy[0][:, 0]]
+                mask.pixel_y = [int(y) for y in result.masks[i].xy[0][:, 1]]
+                mask_array.masks.append(mask)
+
+        self._pub_img.publish(det_img)
+
+        if len(det_array.detections) > 0:
+            self._pub_rect.publish(det_array)
+        if len(kp_array.key_points_array) > 0:
+            self._pub_keypoint.publish(kp_array)
+        if len(mask_array.masks) > 0:
+            self._pub_mask.publish(mask_array)
+
+    @staticmethod
+    def _extract_scalar_value(value):
+        """Return a scalar from tensor/array/scalar YOLO outputs."""
+        if hasattr(value, "item"):
+            return value.item()
+        try:
+            return value[0]
+        except (TypeError, IndexError, KeyError):
+            return value
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = YoloNode()
-    node.trigger_configure()
-    node.trigger_activate()
-    
+
+    execute_default = node.get_parameter("execute_default").get_parameter_value().bool_value
+    if execute_default:
+        node.trigger_configure()
+        node.trigger_activate()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown
-        
-        
+        rclpy.shutdown()
+
 if __name__ == '__main__':
     main()

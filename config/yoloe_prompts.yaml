@@ -1,6 +1,6 @@
-yolo_ros/yolo_node:
+/**/yolo_ros:
   ros__parameters:
-    classes:
+    yoloe_prompts:
       - "person"
       - "snack"
       - "handbag"
