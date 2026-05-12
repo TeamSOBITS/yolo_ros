@@ -44,7 +44,6 @@ class YoloNode(LifecycleNode):
         self.image_topic_name = self.get_parameter("image_topic_name").get_parameter_value().string_value
         self.weight_file = self.get_parameter("weight_file").get_parameter_value().string_value
         self.weights_path = self.get_parameter("weights_path").get_parameter_value().string_value
-        self.enable = self.get_parameter("execute_default").get_parameter_value().bool_value
         self.conf = self.get_parameter("conf").get_parameter_value().double_value
         self.iou = self.get_parameter("iou").get_parameter_value().double_value
 
@@ -69,35 +68,63 @@ class YoloNode(LifecycleNode):
 
         return TransitionCallbackReturn.SUCCESS
 
-    def load_model(self):
+    def load_model(self, weight_file=None, weights_path=None, yoloe_prompts=None):
         try:
-            model_full_path = os.path.join(self.weights_path, self.weight_file)
+            model_weight_file = self.weight_file if weight_file is None else weight_file
+            model_weights_path = self.weights_path if weights_path is None else weights_path
+            model_yoloe_prompts = self.yoloe_prompts if yoloe_prompts is None else yoloe_prompts
+            model_full_path = os.path.join(model_weights_path, model_weight_file)
             self.get_logger().info(f"Loading model: {model_full_path}")
-            self.model = YOLO(model_full_path)
-            if hasattr(self.model, "set_classes"):
-                self.model.set_classes(self.yoloe_prompts)
+            model = YOLO(model_full_path)
+            if hasattr(model, "set_classes"):
+                model.set_classes(model_yoloe_prompts)
+            self.model = model
             return True
         except Exception as e:
             self.get_logger().error(f"Failed to load model: {e}")
             return False
 
     def parameters_callback(self, params):
-        success = True
+        next_weight_file = self.weight_file
+        next_weights_path = self.weights_path
+        next_yoloe_prompts = self.yoloe_prompts
+        next_filter_classes = self.filter_classes
+        next_conf = self.conf
+        next_iou = self.iou
+        should_reload_model = False
+
         for param in params:
             if param.name == "weight_file":
-                self.weight_file = param.value
-                success = self.load_model()
+                next_weight_file = param.value
+                should_reload_model = True
+            elif param.name == "weights_path":
+                next_weights_path = param.value
+                should_reload_model = True
             elif param.name == "yoloe_prompts":
-                self.yoloe_prompts = param.value
-                success = self.load_model()
+                next_yoloe_prompts = param.value
+                should_reload_model = True
             elif param.name == "filter_classes":
-                self.filter_classes = param.value
+                next_filter_classes = param.value
             elif param.name == "conf":
-                self.conf = param.value
+                next_conf = param.value
             elif param.name == "iou":
-                self.iou = param.value
+                next_iou = param.value
 
-        return SetParametersResult(successful=success)
+        if should_reload_model and not self.load_model(
+            weight_file=next_weight_file,
+            weights_path=next_weights_path,
+            yoloe_prompts=next_yoloe_prompts,
+        ):
+            return SetParametersResult(successful=False)
+
+        self.weight_file = next_weight_file
+        self.weights_path = next_weights_path
+        self.yoloe_prompts = next_yoloe_prompts
+        self.filter_classes = next_filter_classes
+        self.conf = next_conf
+        self.iou = next_iou
+
+        return SetParametersResult(successful=True)
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Activating...")
@@ -148,13 +175,12 @@ class YoloNode(LifecycleNode):
         mask_array = DetectMaskArray(header=header)
 
         for i, box in enumerate(result.boxes):
-            label = result.names[int(box.cls)]
-            score = float(box.conf)
+            cls_idx = int(box.cls.item()) if hasattr(box.cls, "item") else int(box.cls[0])
+            label = result.names[cls_idx]
+            score = float(box.conf.item()) if hasattr(box.conf, "item") else float(box.conf[0])
 
-            if (self.filter_classes != [""] and
-                label not in self.filter_classes and
-                not hasattr(self.model, "set_classes") and
-                result.keypoints is None):
+            active_filter_classes = [name for name in self.filter_classes if name]
+            if active_filter_classes and label not in active_filter_classes:
                 continue
 
             det = Detection2D(header=header)
@@ -209,6 +235,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

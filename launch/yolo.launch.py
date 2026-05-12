@@ -3,8 +3,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, AndSubstitution
+from launch.substitutions import LaunchConfiguration, AndSubstitution, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition
 
 def generate_launch_description():
@@ -51,35 +52,23 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "bbox_to_3d_params_file",
-            default_value=os.path.join(
-                get_package_share_directory("image_to_position"),
-                "config",
-                "bbox_to_3d.yaml",
-            ),
+            default_value=PathJoinSubstitution([FindPackageShare("image_to_position"), "config", "bbox_to_3d.yaml"]),
             description="Parameter file path for bbox_to_3d",
         ),
         DeclareLaunchArgument(
             "keypoint_to_3d_params_file",
-            default_value=os.path.join(
-                get_package_share_directory("image_to_position"),
-                "config",
-                "keypoint_to_3d.yaml",
-            ),
+            default_value=PathJoinSubstitution([FindPackageShare("image_to_position"), "config", "keypoint_to_3d.yaml"]),
             description="Parameter file path for keypoint_to_3d",
         ),
         DeclareLaunchArgument(
             "mask_to_3d_params_file",
-            default_value=os.path.join(
-                get_package_share_directory("image_to_position"),
-                "config",
-                "mask_to_3d.yaml",
-            ),
+            default_value=PathJoinSubstitution([FindPackageShare("image_to_position"), "config", "mask_to_3d.yaml"]),
             description="Parameter file path for mask_to_3d",
         ),
         DeclareLaunchArgument(
             "execute_default",
             default_value="True",
-            description="Whether to start YOLO enabled",
+            description="Whether to auto-configure and auto-activate the YOLO lifecycle node",
         ),
         DeclareLaunchArgument(
             "conf",
@@ -144,11 +133,7 @@ def generate_launch_description():
 
     bbox_to_3d_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("image_to_position"),
-                "launch",
-                "bbox_to_3d.launch.py",
-            )
+            PathJoinSubstitution([FindPackageShare("image_to_position"), "launch", "bbox_to_3d.launch.py"])
         ),
         launch_arguments={
             "namespace": namespace,
@@ -160,11 +145,7 @@ def generate_launch_description():
 
     keypoint_to_3d_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("image_to_position"),
-                "launch",
-                "keypoint_to_3d.launch.py",
-            )
+            PathJoinSubstitution([FindPackageShare("image_to_position"), "launch", "keypoint_to_3d.launch.py"])
         ),
         launch_arguments={
             "namespace": namespace,
@@ -176,11 +157,7 @@ def generate_launch_description():
 
     mask_to_3d_cmd = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("image_to_position"),
-                "launch",
-                "mask_to_3d.launch.py",
-            )
+            PathJoinSubstitution([FindPackageShare("image_to_position"), "launch", "mask_to_3d.launch.py"])
         ),
         launch_arguments={
             "namespace": namespace,
