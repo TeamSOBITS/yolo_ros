@@ -224,6 +224,7 @@ class YoloNode(LifecycleNode):
 
     @staticmethod
     def _extract_scalar_value(value):
+        """Return a scalar from tensor/array/scalar YOLO outputs."""
         if hasattr(value, "item"):
             return value.item()
         try:
@@ -246,8 +247,7 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
