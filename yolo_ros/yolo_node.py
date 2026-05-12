@@ -88,41 +88,35 @@ class YoloNode(LifecycleNode):
         next_weight_file = self.weight_file
         next_weights_path = self.weights_path
         next_yoloe_prompts = self.yoloe_prompts
-        next_filter_classes = self.filter_classes
-        next_conf = self.conf
-        next_iou = self.iou
-        should_reload_model = False
+        should_reload = False
 
         for param in params:
             if param.name == "weight_file":
                 next_weight_file = param.value
-                should_reload_model = True
+                should_reload = True
             elif param.name == "weights_path":
                 next_weights_path = param.value
-                should_reload_model = True
+                should_reload = True
             elif param.name == "yoloe_prompts":
                 next_yoloe_prompts = param.value
-                should_reload_model = True
+                should_reload = True
             elif param.name == "filter_classes":
-                next_filter_classes = param.value
+                self.filter_classes = param.value
             elif param.name == "conf":
-                next_conf = param.value
+                self.conf = param.value
             elif param.name == "iou":
-                next_iou = param.value
+                self.iou = param.value
 
-        if should_reload_model and not self.load_model(
-            weight_file=next_weight_file,
-            weights_path=next_weights_path,
-            yoloe_prompts=next_yoloe_prompts,
-        ):
-            return SetParametersResult(successful=False)
-
-        self.weight_file = next_weight_file
-        self.weights_path = next_weights_path
-        self.yoloe_prompts = next_yoloe_prompts
-        self.filter_classes = next_filter_classes
-        self.conf = next_conf
-        self.iou = next_iou
+        if should_reload:
+            if not self.load_model(
+                weight_file=next_weight_file,
+                weights_path=next_weights_path,
+                yoloe_prompts=next_yoloe_prompts,
+            ):
+                return SetParametersResult(successful=False)
+            self.weight_file = next_weight_file
+            self.weights_path = next_weights_path
+            self.yoloe_prompts = next_yoloe_prompts
 
         return SetParametersResult(successful=True)
 
