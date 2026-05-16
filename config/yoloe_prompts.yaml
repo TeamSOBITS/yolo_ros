@@ -1,4 +1,5 @@
-/**/yolo_ros:
+# /**/yolo_ros:
+/**:
   ros__parameters:
     yoloe_prompts:
       - "person"
