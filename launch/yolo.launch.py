@@ -24,24 +24,18 @@ def generate_launch_description():
 
     launch_args = [
         DeclareLaunchArgument(
-            "namespace",
-            default_value="",
-            description="Namespace for the nodes",
-        ),
-        DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
             # default_value="camera/color/image_raw",            ## realsense
             # default_value="rgb/image_raw",                   ## azure_kinect
             # default_value="camera/color/image_raw",          ## orbbec_series ##
-            default_value="camera/rgb/image_raw",            ## xtion
+            # default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "weight_file",
-            # default_value="yolo26n.pt",       # YOLOv26
-            default_value="yolo26n-pose.pt",  # KeyPoint model
-            # default_value="yolo26n-seg.pt",   # Segmentation
-            # default_value="yoloe-26n-seg.pt",   # YOLOE
+            # default_value="yolo26x.pt",       # YOLOv26
+            default_value="yolo26x-pose.pt",  # KeyPoint model
+            # default_value="yolo26x-seg.pt",   # Segmentation
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file name",
         ),
@@ -81,6 +75,16 @@ def generate_launch_description():
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
+            "namespace",
+            default_value="",
+            description="Namespace for the nodes",
+        ),
+        DeclareLaunchArgument(
+            "node_name",
+            default_value="yolo_node",
+            description="Name of the YOLO node",
+        ),
+        DeclareLaunchArgument(
             "use_3d",
             default_value="True",
             description="Whether to activate 3D detections",
@@ -113,7 +117,7 @@ def generate_launch_description():
     yolo_node_cmd = Node(
         package="yolo_ros",
         executable="yolo_node",
-        name="yolo_ros",
+        name=LaunchConfiguration("node_name", default="yolo_node"),
         namespace=namespace,
         parameters=[
             {
@@ -139,6 +143,7 @@ def generate_launch_description():
             "namespace": namespace,
             "params_file": bbox_to_3d_params_file,
             "execute_default": execute_default,
+            "bbox_topic_name": [LaunchConfiguration("node_name"), "/object_boxes"],
         }.items(),
         condition=IfCondition(use_3d),
     )
@@ -151,6 +156,7 @@ def generate_launch_description():
             "namespace": namespace,
             "params_file": keypoint_to_3d_params_file,
             "execute_default": execute_default,
+            "keypoint_topic_name": [LaunchConfiguration("node_name"), "/object_keypoints"],
         }.items(),
         condition=IfCondition(use_3d),
     )
@@ -163,6 +169,7 @@ def generate_launch_description():
             "namespace": namespace,
             "params_file": mask_to_3d_params_file,
             "execute_default": execute_default,
+            "mask_topic_name": [LaunchConfiguration("node_name"), "/object_masks"],
         }.items(),
         condition=IfCondition(AndSubstitution(use_3d, use_mask_3d)),
     )
