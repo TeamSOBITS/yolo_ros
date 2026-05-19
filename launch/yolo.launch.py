@@ -24,18 +24,28 @@ def generate_launch_description():
 
     launch_args = [
         DeclareLaunchArgument(
+            "namespace",
+            default_value="",
+            description="Namespace for the nodes",
+        ),
+        DeclareLaunchArgument(
+            "node_name",
+            default_value="yolo_node",
+            description="Name of the YOLO node",
+        ),
+        DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
             # default_value="camera/color/image_raw",            ## realsense
             # default_value="rgb/image_raw",                   ## azure_kinect
             # default_value="camera/color/image_raw",          ## orbbec_series ##
-            # default_value="camera/rgb/image_raw",            ## xtion
+            default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "weight_file",
-            # default_value="yolo26x.pt",       # YOLOv26
-            default_value="yolo26x-pose.pt",  # KeyPoint model
-            # default_value="yolo26x-seg.pt",   # Segmentation
+            # default_value="yolo26n.pt",       # YOLOv26
+            default_value="yolo26n-pose.pt",  # KeyPoint model
+            # default_value="yolo26n-seg.pt",   # Segmentation
             # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
             description="Weight file name",
         ),
@@ -73,16 +83,6 @@ def generate_launch_description():
             "iou",
             default_value="0.7",
             description="IoU threshold",
-        ),
-        DeclareLaunchArgument(
-            "namespace",
-            default_value="",
-            description="Namespace for the nodes",
-        ),
-        DeclareLaunchArgument(
-            "node_name",
-            default_value="yolo_node",
-            description="Name of the YOLO node",
         ),
         DeclareLaunchArgument(
             "use_3d",
