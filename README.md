@@ -86,9 +86,22 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 2. カスタムの重みファイルを使用する場合：
     - 用意した`.pt`ファイルを`weights`に配置してください．
 
-3. 3D座標変換（物体位置の推定）を有効にする場合：
+3. 3D座標変換（物体位置推定）を使用する場合は，必要な3Dパイプラインを起動引数で切り替える．
+
+    例：`bbox_to_3d` のみを有効にする場合
     ```sh
-    ros2 launch yolo_ros yolo.launch.py use_3d:=True
+    ros2 launch yolo_ros yolo.launch.py \
+      use_bbox_to_3d:=True \
+      use_keypoint_to_3d:=False \
+      use_mask_to_3d:=False
+    ```
+
+    例：`bbox_to_3d` と `keypoint_to_3d` を有効にする場合
+    ```sh
+    ros2 launch yolo_ros yolo.launch.py \
+      use_bbox_to_3d:=True \
+      use_keypoint_to_3d:=True \
+      use_mask_to_3d:=False
     ```
 
 ## パラメーター
@@ -103,6 +116,9 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 | execute_default    | bool         | 起動時に自動でノードをConfigure/Activateするか |
 | conf               | double       | 検出の信頼度しきい値                       |
 | iou                | double       | NMSのIoUしきい値                      |
+| use_bbox_to_3d     | bool         | bbox_to_3d を起動するか                |
+| use_keypoint_to_3d | bool         | keypoint_to_3d を起動するか            |
+| use_mask_to_3d     | bool         | mask_to_3d を起動するか                |
 | filter_classes     | string_array | 検出対象を絞り込むクラス名のリスト                |
 | keypoint_name_list | string_array | 姿勢推定時のキーポイント名のリスト                |
 | yoloe_prompts      | string_array | YOLOEで使用する検出プロンプト                |
