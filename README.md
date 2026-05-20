@@ -108,8 +108,8 @@ This section explains how to set up this repository.
 4. If you want to control YOLO lifecycle startup transitions independently:
     ```sh
     ros2 launch yolo_ros yolo.launch.py \
-      auto_configure:=True \
-      auto_activate:=False
+      auto_configure_2d:=True \
+      auto_activate_2d:=False
     ```
 
 ## Parameters
@@ -121,9 +121,10 @@ See [Ultralytics Predict](https://docs.ultralytics.com/modes/predict/#inference-
 | image_topic_name   | string       | Input image topic name             |
 | weight_file        | string       | Weight file name in the `weights` directory |
 | weights_path       | string       | Directory path where weight files are stored |
-| auto_configure     | bool         | Whether to configure the YOLO lifecycle node on startup |
-| auto_activate      | bool         | Whether to activate the YOLO lifecycle node on startup |
-| execute_default    | bool         | Whether to auto-configure and auto-activate included 3D lifecycle nodes on startup |
+| auto_configure_2d  | bool         | Whether to configure the YOLO lifecycle node on startup |
+| auto_activate_2d   | bool         | Whether to activate the YOLO lifecycle node on startup |
+| auto_configure_3d  | bool         | Whether to configure the Image to Position lifecycle node on startup |
+| auto_activate_3d   | bool         | Whether to activate the Image to Position lifecycle node on startup |
 | conf               | double       | Detection confidence threshold     |
 | iou                | double       | NMS IoU threshold                  |
 | use_bbox_to_3d     | bool         | Whether to launch `bbox_to_3d`     |

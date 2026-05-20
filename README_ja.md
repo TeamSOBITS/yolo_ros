@@ -107,8 +107,8 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 4. YOLOライフサイクルノードの起動時遷移を個別に切り替える場合：
     ```sh
     ros2 launch yolo_ros yolo.launch.py \
-      auto_configure:=True \
-      auto_activate:=False
+      auto_configure_2d:=True \
+      auto_activate_2d:=False
     ```
 
 ## パラメーター
@@ -120,9 +120,10 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 | image_topic_name   | string       | 入力となる画像トピック名                     |
 | weight_file        | string       | 使用する重みファイル名（weightsフォルダ内）        |
 | weights_path       | string       | 重みファイルが保存されているディレクトリパス           |
-| auto_configure     | bool         | 起動時にYOLOライフサイクルノードをConfigureするか |
-| auto_activate      | bool         | 起動時にYOLOライフサイクルノードをActivateするか |
-| execute_default    | bool         | 起動時に含まれる3Dライフサイクルノードを自動でConfigure/Activateするか |
+| auto_configure_2d  | bool         | 起動時にYOLOライフサイクルノードをConfigureするか |
+| auto_activate_2d   | bool         | 起動時にYOLOライフサイクルノードをActivateするか |
+| auto_configure_3d  | bool         | 起動時にImage to PositionライフサイクルノードをConfigureするか |
+| auto_activate_3d   | bool         | 起動時にImage to PositionライフサイクルノードをActivateするか |
 | conf               | double       | 検出の信頼度しきい値                       |
 | iou                | double       | NMSのIoUしきい値                      |
 | use_bbox_to_3d     | bool         | bbox_to_3d を起動するか                |
