@@ -16,6 +16,8 @@ def generate_launch_description():
     bbox_to_3d_params_file = LaunchConfiguration("bbox_to_3d_params_file")
     keypoint_to_3d_params_file = LaunchConfiguration("keypoint_to_3d_params_file")
     mask_to_3d_params_file = LaunchConfiguration("mask_to_3d_params_file")
+    auto_configure = LaunchConfiguration("auto_configure")
+    auto_activate = LaunchConfiguration("auto_activate")
     execute_default = LaunchConfiguration("execute_default")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
@@ -71,9 +73,19 @@ def generate_launch_description():
             description="Parameter file path for mask_to_3d",
         ),
         DeclareLaunchArgument(
+            "auto_configure",
+            default_value="True",
+            description="Whether to configure the YOLO lifecycle node on startup",
+        ),
+        DeclareLaunchArgument(
+            "auto_activate",
+            default_value="True",
+            description="Whether to activate the YOLO lifecycle node on startup",
+        ),
+        DeclareLaunchArgument(
             "execute_default",
             default_value="True",
-            description="Whether to auto-configure and auto-activate the YOLO lifecycle node",
+            description="Whether to auto-configure and auto-activate included 3D lifecycle nodes",
         ),
         DeclareLaunchArgument(
             "conf",
@@ -130,7 +142,8 @@ def generate_launch_description():
                 "image_topic_name": image_topic_name,
                 "weight_file": weight_file,
                 "weights_path": weights_path,
-                "execute_default": execute_default,
+                "auto_configure": auto_configure,
+                "auto_activate": auto_activate,
                 "conf": conf,
                 "iou": iou,
             },
