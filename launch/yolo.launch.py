@@ -3,7 +3,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, AndSubstitution, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition
@@ -19,8 +19,9 @@ def generate_launch_description():
     execute_default = LaunchConfiguration("execute_default")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
-    use_mask_3d = LaunchConfiguration("use_mask_3d")
-    use_3d = LaunchConfiguration("use_3d")
+    use_bbox_to_3d = LaunchConfiguration("use_bbox_to_3d")
+    use_keypoint_to_3d = LaunchConfiguration("use_keypoint_to_3d")
+    use_mask_to_3d = LaunchConfiguration("use_mask_to_3d")
 
     launch_args = [
         DeclareLaunchArgument(
@@ -85,12 +86,17 @@ def generate_launch_description():
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
-            "use_3d",
+            "use_bbox_to_3d",
             default_value="True",
-            description="Whether to activate 3D detections",
+            description="Whether to activate bbox_to_3d",
         ),
         DeclareLaunchArgument(
-            "use_mask_3d",
+            "use_keypoint_to_3d",
+            default_value="True",
+            description="Whether to activate keypoint_to_3d",
+        ),
+        DeclareLaunchArgument(
+            "use_mask_to_3d",
             default_value="False",
             description="Whether to activate mask_to_3d",
         ),
@@ -145,7 +151,7 @@ def generate_launch_description():
             "execute_default": execute_default,
             "bbox_topic_name": [LaunchConfiguration("node_name"), "/object_boxes"],
         }.items(),
-        condition=IfCondition(use_3d),
+        condition=IfCondition(use_bbox_to_3d),
     )
 
     keypoint_to_3d_cmd = IncludeLaunchDescription(
@@ -158,7 +164,7 @@ def generate_launch_description():
             "execute_default": execute_default,
             "keypoint_topic_name": [LaunchConfiguration("node_name"), "/object_keypoints"],
         }.items(),
-        condition=IfCondition(use_3d),
+        condition=IfCondition(use_keypoint_to_3d),
     )
 
     mask_to_3d_cmd = IncludeLaunchDescription(
@@ -171,7 +177,7 @@ def generate_launch_description():
             "execute_default": execute_default,
             "mask_topic_name": [LaunchConfiguration("node_name"), "/object_masks"],
         }.items(),
-        condition=IfCondition(AndSubstitution(use_3d, use_mask_3d)),
+        condition=IfCondition(use_mask_to_3d),
     )
 
     return LaunchDescription(
