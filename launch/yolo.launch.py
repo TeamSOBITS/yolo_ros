@@ -16,7 +16,10 @@ def generate_launch_description():
     bbox_to_3d_params_file = LaunchConfiguration("bbox_to_3d_params_file")
     keypoint_to_3d_params_file = LaunchConfiguration("keypoint_to_3d_params_file")
     mask_to_3d_params_file = LaunchConfiguration("mask_to_3d_params_file")
-    execute_default = LaunchConfiguration("execute_default")
+    auto_configure_2d = LaunchConfiguration("auto_configure_2d")
+    auto_activate_2d = LaunchConfiguration("auto_activate_2d")
+    auto_configure_3d = LaunchConfiguration("auto_configure_3d")
+    auto_activate_3d = LaunchConfiguration("auto_activate_3d")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
     use_bbox_to_3d = LaunchConfiguration("use_bbox_to_3d")
@@ -71,9 +74,24 @@ def generate_launch_description():
             description="Parameter file path for mask_to_3d",
         ),
         DeclareLaunchArgument(
-            "execute_default",
+            "auto_configure_2d",
             default_value="True",
-            description="Whether to auto-configure and auto-activate the YOLO lifecycle node",
+            description="Whether to configure the YOLO lifecycle node on startup",
+        ),
+        DeclareLaunchArgument(
+            "auto_activate_2d",
+            default_value="True",
+            description="Whether to activate the YOLO lifecycle node on startup",
+        ),
+        DeclareLaunchArgument(
+            "auto_configure_3d",
+            default_value="True",
+            description="Whether to configure the Image to Position lifecycle node on startup",
+        ),
+        DeclareLaunchArgument(
+            "auto_activate_3d",
+            default_value="True",
+            description="Whether to activate the Image to Position lifecycle node on startup",
         ),
         DeclareLaunchArgument(
             "conf",
@@ -130,7 +148,8 @@ def generate_launch_description():
                 "image_topic_name": image_topic_name,
                 "weight_file": weight_file,
                 "weights_path": weights_path,
-                "execute_default": execute_default,
+                "auto_configure": auto_configure_2d,
+                "auto_activate": auto_activate_2d,
                 "conf": conf,
                 "iou": iou,
             },
@@ -148,7 +167,8 @@ def generate_launch_description():
         launch_arguments={
             "namespace": namespace,
             "params_file": bbox_to_3d_params_file,
-            "execute_default": execute_default,
+            "auto_configure": auto_configure_3d,
+            "auto_activate": auto_activate_3d,
             "bbox_topic_name": [LaunchConfiguration("node_name"), "/object_boxes"],
         }.items(),
         condition=IfCondition(use_bbox_to_3d),
@@ -161,7 +181,8 @@ def generate_launch_description():
         launch_arguments={
             "namespace": namespace,
             "params_file": keypoint_to_3d_params_file,
-            "execute_default": execute_default,
+            "auto_configure": auto_configure_3d,
+            "auto_activate": auto_activate_3d,
             "keypoint_topic_name": [LaunchConfiguration("node_name"), "/object_keypoints"],
         }.items(),
         condition=IfCondition(use_keypoint_to_3d),
@@ -174,7 +195,8 @@ def generate_launch_description():
         launch_arguments={
             "namespace": namespace,
             "params_file": mask_to_3d_params_file,
-            "execute_default": execute_default,
+            "auto_configure": auto_configure_3d,
+            "auto_activate": auto_activate_3d,
             "mask_topic_name": [LaunchConfiguration("node_name"), "/object_masks"],
         }.items(),
         condition=IfCondition(use_mask_to_3d),

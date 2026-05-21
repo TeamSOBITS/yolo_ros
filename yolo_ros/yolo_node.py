@@ -19,7 +19,8 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("image_topic_name", "camera/color/image_raw")
         self.declare_parameter("weight_file", "yolo26n.pt")
         self.declare_parameter("weights_path", "")
-        self.declare_parameter("execute_default", True)
+        self.declare_parameter("auto_configure", True)
+        self.declare_parameter("auto_activate", True)
         self.declare_parameter("conf", 0.35)
         self.declare_parameter("iou", 0.7)
 
@@ -231,10 +232,21 @@ def main(args=None):
     rclpy.init(args=args)
     node = YoloNode()
 
-    execute_default = node.get_parameter("execute_default").get_parameter_value().bool_value
-    if execute_default:
-        node.trigger_configure()
-        node.trigger_activate()
+    auto_configure = node.get_parameter("auto_configure").get_parameter_value().bool_value
+    auto_activate = node.get_parameter("auto_activate").get_parameter_value().bool_value
+
+    configure_succeeded = True
+    if auto_configure or auto_activate:
+        configure_result = node.trigger_configure()
+        configure_succeeded = configure_result == TransitionCallbackReturn.SUCCESS
+    if auto_activate:
+        if configure_succeeded:
+            node.trigger_activate()
+        else:
+            node.get_logger().error(
+                "Auto-activation requested, but node configuration failed; "
+                "skipping activation."
+            )
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

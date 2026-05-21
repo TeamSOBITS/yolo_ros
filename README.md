@@ -1,5 +1,7 @@
 <a name="readme-top"></a>
 
+[EN](README.md) | [JA](README_ja.md)
+
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -9,43 +11,42 @@
 # Yolo ROS
 
 <details>
-  <summary>目次</summary>
+  <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#概要">概要</a>
+      <a href="#overview">Overview</a>
     </li>
     <li>
-      <a href="#対応モデル">対応モデル</a>
+      <a href="#supported-models">Supported Models</a>
     </li>
     <li>
-      <a href="#セットアップ">セットアップ</a>
+      <a href="#setup">Setup</a>
       <ul>
-        <li><a href="#環境条件">環境条件</a></li>
-        <li><a href="#インストール方法">インストール方法</a></li>
+        <li><a href="#environment">Environment</a></li>
+        <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
-    <li><a href="#実行操作方法">実行・操作方法</a></li>
-    <li><a href="#パラメーター">パラメーター</a></li>
-    <li><a href="#入出力">入出力</a></li>
-    <li><a href="#ライフサイクルノード">ライフサイクルノード</a></li>
-    <li><a href="#デモ">デモ</a></li>
-     <li><a href="#マイルストーン">マイルストーン</a></li>
-    <li><a href="#参考文献">参考文献</a></li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#parameters">Parameters</a></li>
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#references">References</a></li>
   </ol>
 </details>
 
-## 概要
-yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOLOEなど）をROS 2で利用するためのラッパーです．これにより，以下の機能がROS 2環境で実現できます．
+## Overview
+`yolo_ros` is a wrapper package for using Ultralytics YOLO models in ROS 2, including YOLOv3 through YOLOv11, YOLO-NAS, and YOLOE.
 
-- 物体検出 (Object Detection)
-- 人間の姿勢推定 (Human Pose Estimation)
-- インスタンスセグメンテーション (Instance Segmentation)
-- YOLOEによる効率的な推論とプロンプトベースの検出
+It provides the following features in a ROS 2 environment:
 
-## セットアップ
-本レポジトリのセットアップ方法について説明します．
+- Object detection
+- Human pose estimation
+- Instance segmentation
+- Efficient inference and prompt-based detection with YOLOE
 
-### 環境条件
+## Setup
+This section explains how to set up this repository.
+
+### Environment
 
 | System  | Version |
 | ------------- | ------------- |
@@ -53,42 +54,42 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
 | ROS | Jazzy Jalisco |
 | Python | 3.10~ |
 
-### インストール方法
-1. ROS 2の`src`フォルダに移動します．
+### Installation
+1. Move to your ROS 2 `src` directory.
    ```sh
    cd ~/colcon_ws/src/
    ```
-2. 本レポジトリをcloneします．
+2. Clone this repository.
    ```sh
    git clone -b jazzy-devel https://github.com/TeamSOBITS/yolo_ros.git
    ```
-3. レポジトリの中へ移動します．
+3. Move into the repository.
    ```sh
    cd yolo_ros
    ```
-4. 依存パッケージをインストールします．
+4. Install dependencies.
     ```sh
     bash install.sh
     ```
-5. パッケージをコンパイルします．
+5. Build the package.
    ```sh
    cd ~/colcon_ws/
    colcon build --symlink-install
    ```
 
-## 実行・操作方法
-1. カメラを起動し，[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/jazzy-devel/launch/yolo.launch.py)の**image_topic_name**を使用するカメラのトピック名に書き換える．
+## Usage
+1. Launch your camera and update **image_topic_name** in [yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/jazzy-devel/launch/yolo.launch.py) to match your camera topic.
 
     ```sh
     ros2 launch yolo_ros yolo.launch.py
     ```
 
-2. カスタムの重みファイルを使用する場合：
-    - 用意した`.pt`ファイルを`weights`に配置してください．
+2. If you want to use a custom weight file:
+   - Place your `.pt` file in the `weights` directory.
 
-3. 3D座標変換（物体位置推定）を使用する場合は，必要な3Dパイプラインを起動引数で切り替える．
+3. If you want to use 3D coordinate conversion for object position estimation, enable the required 3D pipelines with launch arguments.
 
-    例：`bbox_to_3d` のみを有効にする場合
+    Example: enable only `bbox_to_3d`
     ```sh
     ros2 launch yolo_ros yolo.launch.py \
       use_bbox_to_3d:=True \
@@ -96,7 +97,7 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
       use_mask_to_3d:=False
     ```
 
-    例：`bbox_to_3d` と `keypoint_to_3d` を有効にする場合
+    Example: enable both `bbox_to_3d` and `keypoint_to_3d`
     ```sh
     ros2 launch yolo_ros yolo.launch.py \
       use_bbox_to_3d:=True \
@@ -104,27 +105,37 @@ yolo_rosは，UltralyticsのYOLOモデル（YOLOv3からYOLOv11，YOLO-NAS，YOL
       use_mask_to_3d:=False
     ```
 
-## パラメーター
-以下は[yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/jazzy-devel/launch/yolo.launch.py)およびノードで設定可能な主なパラメーターです．
-詳細は[Ultralytics Predict](https://docs.ultralytics.com/modes/predict/#inference-arguments)も参照してください．
+4. If you want to control YOLO lifecycle startup transitions independently:
+    ```sh
+    ros2 launch yolo_ros yolo.launch.py \
+      auto_configure_2d:=True \
+      auto_activate_2d:=False
+    ```
 
-| パラメーター名            | 型            | 説明                               |
+## Parameters
+The following are the main parameters available in [yolo.launch.py](https://github.com/TeamSOBITS/yolo_ros/blob/jazzy-devel/launch/yolo.launch.py) and the node itself.
+See [Ultralytics Predict](https://docs.ultralytics.com/modes/predict/#inference-arguments) for additional inference arguments.
+
+| Parameter          | Type         | Description                        |
 | ------------------ | ------------ | -------------------------------- |
-| image_topic_name   | string       | 入力となる画像トピック名                     |
-| weight_file        | string       | 使用する重みファイル名（weightsフォルダ内）        |
-| weights_path       | string       | 重みファイルが保存されているディレクトリパス           |
-| execute_default    | bool         | 起動時に自動でノードをConfigure/Activateするか |
-| conf               | double       | 検出の信頼度しきい値                       |
-| iou                | double       | NMSのIoUしきい値                      |
-| use_bbox_to_3d     | bool         | bbox_to_3d を起動するか                |
-| use_keypoint_to_3d | bool         | keypoint_to_3d を起動するか            |
-| use_mask_to_3d     | bool         | mask_to_3d を起動するか                |
-| filter_classes     | string_array | 検出対象を絞り込むクラス名のリスト                |
-| keypoint_name_list | string_array | 姿勢推定時のキーポイント名のリスト                |
-| yoloe_prompts      | string_array | YOLOEで使用する検出プロンプト                |
+| image_topic_name   | string       | Input image topic name             |
+| weight_file        | string       | Weight file name in the `weights` directory |
+| weights_path       | string       | Directory path where weight files are stored |
+| auto_configure_2d  | bool         | Whether to configure the YOLO lifecycle node on startup |
+| auto_activate_2d   | bool         | Whether to activate the YOLO lifecycle node on startup |
+| auto_configure_3d  | bool         | Whether to configure the Image to Position lifecycle node on startup |
+| auto_activate_3d   | bool         | Whether to activate the Image to Position lifecycle node on startup |
+| conf               | double       | Detection confidence threshold     |
+| iou                | double       | NMS IoU threshold                  |
+| use_bbox_to_3d     | bool         | Whether to launch `bbox_to_3d`     |
+| use_keypoint_to_3d | bool         | Whether to launch `keypoint_to_3d` |
+| use_mask_to_3d     | bool         | Whether to launch `mask_to_3d`     |
+| filter_classes     | string_array | List of class names to filter detections |
+| keypoint_name_list | string_array | List of keypoint names for pose estimation |
+| yoloe_prompts      | string_array | Detection prompts used by YOLOE    |
 
-## デモ
-| 物体検出 | 姿勢推定 | セグメンテーション |
+## Demo
+| Object Detection | Pose Estimation | Segmentation |
 |:---:|:---:|:---:|
 | ![](docs/yolo26n.jpg) | ![](docs/yolo26n-pose.jpg) | ![](docs/yoloe-26n-seg.jpg) |
 
@@ -153,7 +164,7 @@ ros2 param set /yolo_ros weight_file "yoloe-26n-seg.pt"
 ros2 param set /yolo_ros yoloe_prompts "['bottle', 'laptop']"
 ```
 
-## 参考文献
+## References
 * [Ultralytics Documentation](https://docs.ultralytics.com/)
 
 [contributors-shield]: https://img.shields.io/github/contributors/TeamSOBITS/yolo_ros.svg?style=for-the-badge
