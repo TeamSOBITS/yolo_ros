@@ -235,10 +235,18 @@ def main(args=None):
     auto_configure = node.get_parameter("auto_configure").get_parameter_value().bool_value
     auto_activate = node.get_parameter("auto_activate").get_parameter_value().bool_value
 
+    configure_succeeded = True
     if auto_configure or auto_activate:
-        node.trigger_configure()
+        configure_result = node.trigger_configure()
+        configure_succeeded = configure_result == TransitionCallbackReturn.SUCCESS
     if auto_activate:
-        node.trigger_activate()
+        if configure_succeeded:
+            node.trigger_activate()
+        else:
+            node.get_logger().error(
+                "Auto-activation requested, but node configuration failed; "
+                "skipping activation."
+            )
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
