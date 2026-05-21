@@ -19,8 +19,8 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("image_topic_name", "camera/color/image_raw")
         self.declare_parameter("weight_file", "yolo26n.pt")
         self.declare_parameter("weights_path", "")
-        self.declare_parameter("auto_configure_2d", True)
-        self.declare_parameter("auto_activate_2d", True)
+        self.declare_parameter("auto_configure", True)
+        self.declare_parameter("auto_activate", True)
         self.declare_parameter("conf", 0.35)
         self.declare_parameter("iou", 0.7)
 
@@ -232,12 +232,12 @@ def main(args=None):
     rclpy.init(args=args)
     node = YoloNode()
 
-    auto_configure_2d = node.get_parameter("auto_configure_2d").get_parameter_value().bool_value
-    auto_activate_2d = node.get_parameter("auto_activate_2d").get_parameter_value().bool_value
+    auto_configure = node.get_parameter("auto_configure").get_parameter_value().bool_value
+    auto_activate = node.get_parameter("auto_activate").get_parameter_value().bool_value
 
-    if auto_configure_2d or auto_activate_2d:
+    if auto_configure or auto_activate:
         node.trigger_configure()
-    if auto_activate_2d:
+    if auto_activate:
         node.trigger_activate()
     try:
         rclpy.spin(node)
