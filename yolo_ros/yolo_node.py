@@ -40,6 +40,7 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("yoloe_prompts", [""])
         self.declare_parameter("image_reliability", "best_effort")
         self.declare_parameter("device", "cuda" if torch.cuda.is_available() else "cpu")
+        self.declare_parameter("fuse", True)
 
         self._cv_bridge = CvBridge()
         self._predictor = None
@@ -67,6 +68,7 @@ class YoloNode(LifecycleNode):
         self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
         self.image_reliability = self.get_parameter("image_reliability").get_parameter_value().string_value
         self.device = self.get_parameter("device").get_parameter_value().string_value
+        self.fuse = self.get_parameter("fuse").get_parameter_value().bool_value
 
         if not 0.0 < self.conf <= 1.0:
             self.get_logger().error(f"conf must be in (0.0, 1.0], got {self.conf}")
@@ -90,6 +92,7 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
         self.get_logger().info(f"Image reliability: {self.image_reliability}")
         self.get_logger().info(f"Device: {self.device}")
+        self.get_logger().info(f"Fuse: {self.fuse}")
 
         if not self.load_model():
             return TransitionCallbackReturn.FAILURE
@@ -150,11 +153,12 @@ class YoloNode(LifecycleNode):
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
 
-    def load_model(self, weight_file=None, weights_path=None, yoloe_prompts=None, device=None):
+    def load_model(self, weight_file=None, weights_path=None, yoloe_prompts=None, device=None, fuse=None):
         model_weight_file = self.weight_file if weight_file is None else weight_file
         model_weights_path = self.weights_path if weights_path is None else weights_path
         model_yoloe_prompts = self.yoloe_prompts if yoloe_prompts is None else yoloe_prompts
         model_device = self.device if device is None else device
+        model_fuse = self.fuse if fuse is None else fuse
         model_full_path = os.path.join(model_weights_path, model_weight_file)
 
         if not os.path.exists(model_full_path):
@@ -172,6 +176,12 @@ class YoloNode(LifecycleNode):
                     self.get_logger().error("YOLOE model requires at least one non-empty prompt in yoloe_prompts")
                     return False
                 model.set_classes(active_prompts)
+            if model_fuse:
+                if hasattr(model, "fuse"):
+                    model.fuse()
+                    self.get_logger().info("Model fused (Conv+BN layers merged)")
+                else:
+                    self.get_logger().warn("fuse=True but model does not support fuse() — skipping")
             self._predictor = model
             self.get_logger().info(f"Model loaded: {model_full_path} on {model.device}")
             return True
@@ -183,6 +193,7 @@ class YoloNode(LifecycleNode):
         next_weight_file = self.weight_file
         next_weights_path = self.weights_path
         next_yoloe_prompts = self.yoloe_prompts
+        next_fuse = self.fuse
         should_reload = False
 
         for param in params:
@@ -212,6 +223,14 @@ class YoloNode(LifecycleNode):
                 else:
                     next_yoloe_prompts = param.value
                     should_reload = True
+            elif param.name == "fuse":
+                if self._state_machine.current_state[1] == "active":
+                    return SetParametersResult(
+                        successful=False,
+                        reason="fuse cannot be changed while active; deactivate first",
+                    )
+                next_fuse = bool(param.value)
+                should_reload = True
             elif param.name == "filter_classes":
                 self.filter_classes = param.value
                 self._warn_filter_classes_ignored()
@@ -252,11 +271,13 @@ class YoloNode(LifecycleNode):
                 weight_file=next_weight_file,
                 weights_path=next_weights_path,
                 yoloe_prompts=next_yoloe_prompts,
+                fuse=next_fuse,
             ):
                 return SetParametersResult(successful=False, reason="Model reload failed")
             self.weight_file = next_weight_file
             self.weights_path = next_weights_path
             self.yoloe_prompts = next_yoloe_prompts
+            self.fuse = next_fuse
 
         return SetParametersResult(successful=True)
 
