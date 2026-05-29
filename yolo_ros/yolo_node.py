@@ -51,6 +51,18 @@ class YoloNode(LifecycleNode):
         self._pub_keypoint = None
         self._pub_mask = None
 
+        self.weight_file = ""
+        self.weights_path = ""
+        self.conf = 0.35
+        self.iou = 0.7
+        self.filter_classes = [""]
+        self.keypoint_name_list = [""]
+        self.yoloe_prompts = [""]
+        self.image_reliability = "best_effort"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.fuse = True
+        self.image_qos_profile = None
+
         self._param_cb = self.add_on_set_parameters_callback(self.parameters_callback)
         self._param_cb_registered = True
 
@@ -266,7 +278,7 @@ class YoloNode(LifecycleNode):
                 self.image_qos_profile.reliability = self._RELIABILITY_MAP[value]
                 self.get_logger().info(f"Updated image_reliability: {self.image_reliability}")
 
-        if should_reload:
+        if should_reload and self._predictor is not None:
             if not self.load_model(
                 weight_file=next_weight_file,
                 weights_path=next_weights_path,
