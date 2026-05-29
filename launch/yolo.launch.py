@@ -79,12 +79,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "auto_configure_2d",
-            default_value="false",
+            default_value="true",
             description="Whether to configure the YOLO lifecycle node on startup",
         ),
         DeclareLaunchArgument(
             "auto_activate_2d",
-            default_value="false",
+            default_value="true",
             description="Whether to activate the YOLO lifecycle node on startup",
         ),
         DeclareLaunchArgument(
