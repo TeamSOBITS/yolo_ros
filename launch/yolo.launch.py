@@ -22,6 +22,9 @@ def generate_launch_description():
     auto_activate_3d = LaunchConfiguration("auto_activate_3d")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
+    image_reliability = LaunchConfiguration("image_reliability")
+    device = LaunchConfiguration("device")
+    fuse = LaunchConfiguration("fuse")
     use_bbox_to_3d = LaunchConfiguration("use_bbox_to_3d")
     use_keypoint_to_3d = LaunchConfiguration("use_keypoint_to_3d")
     use_mask_to_3d = LaunchConfiguration("use_mask_to_3d")
@@ -40,17 +43,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
-            # default_value="camera/color/image_raw",            ## realsense
+            default_value="camera/color/image_raw",          ## realsense
             # default_value="rgb/image_raw",                   ## azure_kinect
             # default_value="camera/color/image_raw",          ## orbbec_series ##
-            default_value="camera/rgb/image_raw",            ## xtion
+            # default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "weight_file",
-            # default_value="yolo26n.pt",       # YOLOv26
-            default_value="yolo26n-pose.pt",  # KeyPoint model
-            # default_value="yolo26n-seg.pt",   # Segmentation
-            # default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights", "best.pt"),
+            default_value="yolo26m.pt",       # YOLOv26
+            # default_value="yolo26m-pose.pt",  # KeyPoint model
+            # default_value="yolo26m-seg.pt",   # Segmentation
+            # default_value="yolo26m-sem.pt",   # Semantic Segmentation
+            # default_value="yoloe-26m-seg.pt", # YOLO-E segmentation
             description="Weight file name",
         ),
         DeclareLaunchArgument(
@@ -75,22 +79,22 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "auto_configure_2d",
-            default_value="True",
+            default_value="true",
             description="Whether to configure the YOLO lifecycle node on startup",
         ),
         DeclareLaunchArgument(
             "auto_activate_2d",
-            default_value="True",
+            default_value="true",
             description="Whether to activate the YOLO lifecycle node on startup",
         ),
         DeclareLaunchArgument(
             "auto_configure_3d",
-            default_value="True",
+            default_value="true",
             description="Whether to configure the Image to Position lifecycle node on startup",
         ),
         DeclareLaunchArgument(
             "auto_activate_3d",
-            default_value="True",
+            default_value="true",
             description="Whether to activate the Image to Position lifecycle node on startup",
         ),
         DeclareLaunchArgument(
@@ -104,18 +108,33 @@ def generate_launch_description():
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
+            "image_reliability",
+            default_value="best_effort",
+            description="QoS reliability for the image subscription: 'best_effort', 'reliable', 'system_default', 'best_available', or 'unknown'",
+        ),
+        DeclareLaunchArgument(
+            "device",
+            default_value="cuda",
+            description="Inference device: 'cuda', 'cpu', or 'cuda:0'",
+        ),
+        DeclareLaunchArgument(
+            "fuse",
+            default_value="true",
+            description="Fuse Conv+BN layers after load for faster inference",
+        ),
+        DeclareLaunchArgument(
             "use_bbox_to_3d",
-            default_value="True",
+            default_value="true",
             description="Whether to activate bbox_to_3d",
         ),
         DeclareLaunchArgument(
             "use_keypoint_to_3d",
-            default_value="True",
+            default_value="false",
             description="Whether to activate keypoint_to_3d",
         ),
         DeclareLaunchArgument(
             "use_mask_to_3d",
-            default_value="False",
+            default_value="false",
             description="Whether to activate mask_to_3d",
         ),
     ]
@@ -152,6 +171,9 @@ def generate_launch_description():
                 "auto_activate": auto_activate_2d,
                 "conf": conf,
                 "iou": iou,
+                "image_reliability": image_reliability,
+                "device": device,
+                "fuse": fuse,
             },
             yoloe_prompts,
             detection_filters,
