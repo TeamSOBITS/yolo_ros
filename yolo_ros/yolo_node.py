@@ -126,20 +126,13 @@ class YoloNode(LifecycleNode):
 
     def _validate_keypoint_name_list(self) -> None:
         kpt_shape = getattr(self._predictor, "kpt_shape", None)
-        if kpt_shape is None:
-            return
-        n_kpts = kpt_shape[0]
-        self.keypoint_name_list = [n for n in self.keypoint_name_list if n]
-        if not self.keypoint_name_list:
-            self.get_logger().warn(
-                f"Pose model detected ({n_kpts} keypoints) but keypoint_name_list is empty — "
-                "no keypoints will be published"
-            )
-        elif len(self.keypoint_name_list) > n_kpts:
-            self.get_logger().error(
-                f"keypoint_name_list has {len(self.keypoint_name_list)} entries but model only has "
-                f"{n_kpts} keypoints — reduce the list to at most {n_kpts} entries"
-            )
+        if kpt_shape is not None:
+            self.keypoint_name_list = [n for n in self.keypoint_name_list if n]
+            if not self.keypoint_name_list:
+                self.get_logger().warn(
+                    f"Pose model detected ({kpt_shape[0]} keypoints) but keypoint_name_list is empty — "
+                    "no keypoints will be published"
+                )
 
     def _release_predictor(self) -> None:
         model = getattr(self, "_predictor", None)
@@ -222,7 +215,6 @@ class YoloNode(LifecycleNode):
             elif param.name == "filter_classes":
                 self.filter_classes = param.value
                 self._warn_filter_classes_ignored()
-                self.get_logger().info(f"Updated filter_classes: {self.filter_classes}")
             elif param.name == "keypoint_name_list":
                 self.keypoint_name_list = list(param.value)
                 self._validate_keypoint_name_list()
@@ -269,21 +261,26 @@ class YoloNode(LifecycleNode):
         return SetParametersResult(successful=True)
 
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info("Activating...")
         self._sub = self.create_subscription(Image, self.image_topic_name, self.image_callback, self.image_qos_profile)
         return super().on_activate(state)
 
-    def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
-        self.get_logger().info("Deactivating...")
+    def _destroy_subscription(self) -> None:
         sub = getattr(self, "_sub", None)
         if sub is not None:
             self.destroy_subscription(sub)
             self._sub = None
+
+    def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
+        self.get_logger().info("Deactivating...")
+        self._destroy_subscription()
         return super().on_deactivate(state)
 
     def _remove_param_cb(self) -> None:
         if getattr(self, "_param_cb_registered", False):
-            self.remove_on_set_parameters_callback(self._param_cb)
+            try:
+                self.remove_on_set_parameters_callback(self._param_cb)
+            except Exception:
+                pass
             self._param_cb_registered = False
 
     def _destroy_publishers(self) -> None:
@@ -300,6 +297,7 @@ class YoloNode(LifecycleNode):
         return super().on_cleanup(state)
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
+        self._destroy_subscription()
         self._remove_param_cb()
         self._destroy_publishers()
         self._release_predictor()
@@ -409,6 +407,8 @@ def main(args=None):
                 "Auto-activation requested, but node configuration failed; "
                 "skipping activation."
             )
+    node.get_logger().info("YOLO Node started. Spinning...")
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
