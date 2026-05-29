@@ -193,7 +193,7 @@ class YoloNode(LifecycleNode):
                     model.fuse()
                     self.get_logger().info("Model fused (Conv+BN layers merged)")
                 else:
-                    self.get_logger().warn("fuse=True but model does not support fuse() — skipping")
+                    self.get_logger().warn("fuse=True but this model type does not support fuse() — skipping")
             self._predictor = model
             self.get_logger().info(f"Model loaded: {model_full_path} on {model.device}")
             return True

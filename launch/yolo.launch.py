@@ -24,6 +24,7 @@ def generate_launch_description():
     iou = LaunchConfiguration("iou")
     image_reliability = LaunchConfiguration("image_reliability")
     device = LaunchConfiguration("device")
+    fuse = LaunchConfiguration("fuse")
     use_bbox_to_3d = LaunchConfiguration("use_bbox_to_3d")
     use_keypoint_to_3d = LaunchConfiguration("use_keypoint_to_3d")
     use_mask_to_3d = LaunchConfiguration("use_mask_to_3d")
@@ -117,6 +118,11 @@ def generate_launch_description():
             description="Inference device: 'cuda', 'cpu', or 'cuda:0'",
         ),
         DeclareLaunchArgument(
+            "fuse",
+            default_value="true",
+            description="Fuse Conv+BN layers after load for faster inference",
+        ),
+        DeclareLaunchArgument(
             "use_bbox_to_3d",
             default_value="true",
             description="Whether to activate bbox_to_3d",
@@ -167,6 +173,7 @@ def generate_launch_description():
                 "iou": iou,
                 "image_reliability": image_reliability,
                 "device": device,
+                "fuse": fuse,
             },
             yoloe_prompts,
             detection_filters,
