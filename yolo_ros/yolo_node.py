@@ -151,7 +151,7 @@ class YoloNode(LifecycleNode):
         should_reload = False
 
         for param in params:
-            if param.name in ("weight_file", "weights_path", "yoloe_prompts"):
+            if param.name in ("weight_file", "weights_path"):
                 if self._state_machine.current_state[1] == "active":
                     return SetParametersResult(
                         successful=False,
@@ -161,17 +161,27 @@ class YoloNode(LifecycleNode):
                     next_weight_file = param.value
                 elif param.name == "weights_path":
                     next_weights_path = param.value
-                elif param.name == "yoloe_prompts":
-                    active_prompts = [p for p in param.value if p]
-                    if self._predictor is not None and hasattr(self._predictor, "set_classes") and not active_prompts:
+                should_reload = True
+            elif param.name == "yoloe_prompts":
+                active_prompts = [p for p in param.value if p]
+                if self._predictor is not None and hasattr(self._predictor, "set_classes"):
+                    if not active_prompts:
                         return SetParametersResult(
                             successful=False,
                             reason="YOLOE model requires at least one non-empty prompt in yoloe_prompts",
                         )
+                    self._predictor.set_classes(active_prompts)
+                    self.yoloe_prompts = param.value
+                    self.get_logger().info(f"Updated yoloe_prompts: {active_prompts}")
+                else:
                     next_yoloe_prompts = param.value
-                should_reload = True
+                    should_reload = True
             elif param.name == "filter_classes":
                 self.filter_classes = param.value
+                self.get_logger().info(f"Updated filter_classes: {self.filter_classes}")
+            elif param.name == "keypoint_name_list":
+                self.keypoint_name_list = list(param.value)
+                self.get_logger().info(f"Updated keypoint_name_list: {self.keypoint_name_list}")
             elif param.name == "conf":
                 value = float(param.value)
                 if not 0.0 < value <= 1.0:
