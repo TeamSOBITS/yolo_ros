@@ -39,6 +39,7 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("keypoint_name_list", [""])
         self.declare_parameter("yoloe_prompts", [""])
         self.declare_parameter("image_reliability", "best_effort")
+        self.declare_parameter("device", "cuda" if torch.cuda.is_available() else "cpu")
 
         self._cv_bridge = CvBridge()
         self._predictor = None
@@ -65,6 +66,7 @@ class YoloNode(LifecycleNode):
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
         self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
         self.image_reliability = self.get_parameter("image_reliability").get_parameter_value().string_value
+        self.device = self.get_parameter("device").get_parameter_value().string_value
 
         if not 0.0 < self.conf <= 1.0:
             self.get_logger().error(f"conf must be in (0.0, 1.0], got {self.conf}")
@@ -102,16 +104,22 @@ class YoloNode(LifecycleNode):
         model_device = str(getattr(model, "device", ""))
         self._predictor = None
         if model is not None:
+            if hasattr(model, "predictor") and model.predictor is not None:
+                model.predictor = None
+            if hasattr(model, "trainer") and model.trainer is not None:
+                model.trainer = None
             del model
+        gc.collect()
         if "cuda" in model_device:
             self.get_logger().info("Clearing CUDA cache")
+            torch.cuda.synchronize()
             torch.cuda.empty_cache()
-        gc.collect()
 
-    def load_model(self, weight_file=None, weights_path=None, yoloe_prompts=None):
+    def load_model(self, weight_file=None, weights_path=None, yoloe_prompts=None, device=None):
         model_weight_file = self.weight_file if weight_file is None else weight_file
         model_weights_path = self.weights_path if weights_path is None else weights_path
         model_yoloe_prompts = self.yoloe_prompts if yoloe_prompts is None else yoloe_prompts
+        model_device = self.device if device is None else device
         model_full_path = os.path.join(model_weights_path, model_weight_file)
 
         if not os.path.exists(model_full_path):
@@ -120,8 +128,9 @@ class YoloNode(LifecycleNode):
 
         try:
             self._release_predictor()
-            self.get_logger().info(f"Loading model: {model_full_path}")
+            self.get_logger().info(f"Loading model: {model_full_path} on {model_device}")
             model = YOLO(model_full_path)
+            model.to(model_device)
             if hasattr(model, "set_classes"):
                 active_prompts = [p for p in model_yoloe_prompts if p]
                 if not active_prompts:
@@ -251,6 +260,7 @@ class YoloNode(LifecycleNode):
             source=cv_image,
             conf=self.conf,
             iou=self.iou,
+            device=self.device,
             verbose=False
         )
         return results
