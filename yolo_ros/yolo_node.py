@@ -80,10 +80,22 @@ class YoloNode(LifecycleNode):
             )
             return TransitionCallbackReturn.FAILURE
 
+        self.get_logger().info(f"Image topic: {self.image_topic_name}")
+        self.get_logger().info(f"Weight file: {self.weight_file}")
+        self.get_logger().info(f"Weights path: {self.weights_path}")
+        self.get_logger().info(f"Conf: {self.conf}")
+        self.get_logger().info(f"IoU: {self.iou}")
+        self.get_logger().info(f"Filter classes: {self.filter_classes}")
+        self.get_logger().info(f"Keypoint name list: {self.keypoint_name_list}")
+        self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
         self.get_logger().info(f"Image reliability: {self.image_reliability}")
+        self.get_logger().info(f"Device: {self.device}")
 
         if not self.load_model():
             return TransitionCallbackReturn.FAILURE
+
+        self._validate_keypoint_name_list()
+        self._warn_filter_classes_ignored()
 
         self.image_qos_profile = QoSProfile(
             reliability=self._RELIABILITY_MAP[self.image_reliability],
@@ -98,6 +110,36 @@ class YoloNode(LifecycleNode):
         self._pub_mask = self.create_lifecycle_publisher(DetectMaskArray, self.get_name() + "/object_masks", 1)
 
         return TransitionCallbackReturn.SUCCESS
+
+    def _is_yoloe(self) -> bool:
+        return self._predictor is not None and hasattr(self._predictor, "set_classes")
+
+    def _warn_filter_classes_ignored(self) -> None:
+        if not self._is_yoloe():
+            return
+        active = [n for n in self.filter_classes if n]
+        if active:
+            self.get_logger().warn(
+                "filter_classes is set but this is a YOLOE model — "
+                "use yoloe_prompts to filter classes; filter_classes will be ignored"
+            )
+
+    def _validate_keypoint_name_list(self) -> None:
+        kpt_shape = getattr(self._predictor, "kpt_shape", None)
+        if kpt_shape is None:
+            return
+        n_kpts = kpt_shape[0]
+        self.keypoint_name_list = [n for n in self.keypoint_name_list if n]
+        if not self.keypoint_name_list:
+            self.get_logger().warn(
+                f"Pose model detected ({n_kpts} keypoints) but keypoint_name_list is empty — "
+                "no keypoints will be published"
+            )
+        elif len(self.keypoint_name_list) > n_kpts:
+            self.get_logger().error(
+                f"keypoint_name_list has {len(self.keypoint_name_list)} entries but model only has "
+                f"{n_kpts} keypoints — reduce the list to at most {n_kpts} entries"
+            )
 
     def _release_predictor(self) -> None:
         model = getattr(self, "_predictor", None)
@@ -173,14 +215,17 @@ class YoloNode(LifecycleNode):
                     self._predictor.set_classes(active_prompts)
                     self.yoloe_prompts = param.value
                     self.get_logger().info(f"Updated yoloe_prompts: {active_prompts}")
+                    self._warn_filter_classes_ignored()
                 else:
                     next_yoloe_prompts = param.value
                     should_reload = True
             elif param.name == "filter_classes":
                 self.filter_classes = param.value
+                self._warn_filter_classes_ignored()
                 self.get_logger().info(f"Updated filter_classes: {self.filter_classes}")
             elif param.name == "keypoint_name_list":
                 self.keypoint_name_list = list(param.value)
+                self._validate_keypoint_name_list()
                 self.get_logger().info(f"Updated keypoint_name_list: {self.keypoint_name_list}")
             elif param.name == "conf":
                 value = float(param.value)
