@@ -3,8 +3,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 from launch.conditions import IfCondition
 
@@ -22,6 +23,9 @@ def generate_launch_description():
     auto_activate_3d = LaunchConfiguration("auto_activate_3d")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
+    mode = LaunchConfiguration("mode")
+    tracker = LaunchConfiguration("tracker")
+    use_detection_filter = LaunchConfiguration("use_detection_filter")
     image_reliability = LaunchConfiguration("image_reliability")
     device = LaunchConfiguration("device")
     fuse = LaunchConfiguration("fuse")
@@ -43,10 +47,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
-            default_value="camera/color/image_raw",          ## realsense
+            # default_value="camera/color/image_raw",          ## realsense
             # default_value="rgb/image_raw",                   ## azure_kinect
             # default_value="camera/color/image_raw",          ## orbbec_series ##
             # default_value="camera/rgb/image_raw",            ## xtion
+            default_value="/image_raw",                        ## 内部カメラ
+
         ),
         DeclareLaunchArgument(
             "weight_file",
@@ -99,13 +105,28 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "conf",
-            default_value="0.35",
+            default_value="0.5",
             description="Minimum probability of a detection to be published",
         ),
         DeclareLaunchArgument(
             "iou",
             default_value="0.7",
             description="IoU threshold",
+        ),
+        DeclareLaunchArgument(
+            "mode",
+            default_value="detect",
+            description="Inference mode: 'detect' uses predict(), 'track' uses track()",
+        ),
+        DeclareLaunchArgument(
+            "tracker",
+            default_value="botsort.yaml",
+            description="Ultralytics tracker config: botsort.yaml or bytetrack.yaml",
+        ),
+        DeclareLaunchArgument(
+            "use_detection_filter",
+            default_value="false",
+            description="Use filter_classes from detection_filters.yaml",
         ),
         DeclareLaunchArgument(
             "image_reliability",
@@ -171,6 +192,13 @@ def generate_launch_description():
                 "auto_activate": auto_activate_2d,
                 "conf": conf,
                 "iou": iou,
+                "yolo_mode": mode,
+                "use_tracking": ParameterValue(
+                    PythonExpression(["'", mode, "' == 'track'"]),
+                    value_type=bool,
+                ),
+                "tracker": tracker,
+                "use_detection_filter": use_detection_filter,
                 "image_reliability": image_reliability,
                 "device": device,
                 "fuse": fuse,

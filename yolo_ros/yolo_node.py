@@ -16,6 +16,9 @@ from ultralytics import YOLO
 
 class YoloNode(LifecycleNode):
 
+    _MODE_CHOICES = ("detect", "track")
+    _TRACKER_CHOICES = ("botsort.yaml", "bytetrack.yaml")
+
     _RELIABILITY_MAP = {
         "best_effort": QoSReliabilityPolicy.BEST_EFFORT,
         "reliable": QoSReliabilityPolicy.RELIABLE,
@@ -34,6 +37,10 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("auto_activate", True)
         self.declare_parameter("conf", 0.35)
         self.declare_parameter("iou", 0.7)
+        self.declare_parameter("yolo_mode", "detect")
+        self.declare_parameter("use_tracking", False)
+        self.declare_parameter("tracker", "botsort.yaml")
+        self.declare_parameter("use_detection_filter", True)
 
         self.declare_parameter("filter_classes", [""])
         self.declare_parameter("keypoint_name_list", [""])
@@ -55,6 +62,10 @@ class YoloNode(LifecycleNode):
         self.weights_path = ""
         self.conf = 0.35
         self.iou = 0.7
+        self.yolo_mode = "detect"
+        self.use_tracking = False
+        self.tracker = "botsort.yaml"
+        self.use_detection_filter = True
         self.filter_classes = [""]
         self.keypoint_name_list = [""]
         self.yoloe_prompts = [""]
@@ -74,6 +85,13 @@ class YoloNode(LifecycleNode):
         self.weights_path = self.get_parameter("weights_path").get_parameter_value().string_value
         self.conf = self.get_parameter("conf").get_parameter_value().double_value
         self.iou = self.get_parameter("iou").get_parameter_value().double_value
+        self.yolo_mode = self.get_parameter("yolo_mode").get_parameter_value().string_value
+        self.use_tracking = self.get_parameter("use_tracking").get_parameter_value().bool_value
+        if self.yolo_mode not in self._MODE_CHOICES:
+            self.yolo_mode = "track" if self.use_tracking else "detect"
+        self.use_tracking = self.yolo_mode == "track"
+        self.tracker = self.get_parameter("tracker").get_parameter_value().string_value
+        self.use_detection_filter = self.get_parameter("use_detection_filter").get_parameter_value().bool_value
 
         self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
@@ -88,6 +106,16 @@ class YoloNode(LifecycleNode):
         if not 0.0 < self.iou <= 1.0:
             self.get_logger().error(f"iou must be in (0.0, 1.0], got {self.iou}")
             return TransitionCallbackReturn.FAILURE
+        if self.yolo_mode not in self._MODE_CHOICES:
+            self.get_logger().error(
+                f"yolo_mode must be one of {self._MODE_CHOICES}, got '{self.yolo_mode}'"
+            )
+            return TransitionCallbackReturn.FAILURE
+        if self.tracker not in self._TRACKER_CHOICES:
+            self.get_logger().error(
+                f"tracker must be one of {self._TRACKER_CHOICES}, got '{self.tracker}'"
+            )
+            return TransitionCallbackReturn.FAILURE
         if self.image_reliability not in self._RELIABILITY_MAP:
             self.get_logger().error(
                 f"image_reliability must be one of {list(self._RELIABILITY_MAP)}, got '{self.image_reliability}'"
@@ -99,6 +127,10 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"Weights path: {self.weights_path}")
         self.get_logger().info(f"Conf: {self.conf}")
         self.get_logger().info(f"IoU: {self.iou}")
+        self.get_logger().info(f"YOLO mode: {self.yolo_mode}")
+        self.get_logger().info(f"Use tracking: {self.use_tracking}")
+        self.get_logger().info(f"Tracker: {self.tracker}")
+        self.get_logger().info(f"Use detection filter: {self.use_detection_filter}")
         self.get_logger().info(f"Filter classes: {self.filter_classes}")
         self.get_logger().info(f"Keypoint name list: {self.keypoint_name_list}")
         self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
@@ -111,6 +143,7 @@ class YoloNode(LifecycleNode):
 
         self._validate_keypoint_name_list()
         self._warn_filter_classes_ignored()
+        self._log_filter_class_ids()
 
         self.image_qos_profile = QoSProfile(
             reliability=self._RELIABILITY_MAP[self.image_reliability],
@@ -130,7 +163,7 @@ class YoloNode(LifecycleNode):
         return self._predictor is not None and hasattr(self._predictor, "set_classes")
 
     def _warn_filter_classes_ignored(self) -> None:
-        if not self._is_yoloe():
+        if not self._is_yoloe() or not self.use_detection_filter:
             return
         active = [n for n in self.filter_classes if n]
         if active:
@@ -138,6 +171,45 @@ class YoloNode(LifecycleNode):
                 "filter_classes is set but this is a YOLOE model — "
                 "use yoloe_prompts to filter classes; filter_classes will be ignored"
             )
+
+    def _model_names(self):
+        if self._predictor is None:
+            return {}
+        names = getattr(self._predictor, "names", {})
+        if isinstance(names, dict):
+            return names
+        return dict(enumerate(names))
+
+    def _active_filter_classes(self):
+        if not self.use_detection_filter:
+            return []
+        return [name for name in self.filter_classes if name]
+
+    def _filter_class_ids(self):
+        active = self._active_filter_classes()
+        if not active or self._is_yoloe():
+            return None
+
+        names = self._model_names()
+        name_to_id = {name: class_id for class_id, name in names.items()}
+        class_ids = []
+        unknown_names = []
+        for name in active:
+            if name in name_to_id:
+                class_ids.append(int(name_to_id[name]))
+            else:
+                unknown_names.append(name)
+
+        if unknown_names:
+            self.get_logger().warn(
+                f"filter_classes contains names not found in this model: {unknown_names}"
+            )
+        return class_ids
+
+    def _log_filter_class_ids(self) -> None:
+        class_ids = self._filter_class_ids()
+        if class_ids is not None:
+            self.get_logger().info(f"Filter class IDs: {class_ids}")
 
     def _validate_keypoint_name_list(self) -> None:
         kpt_shape = getattr(self._predictor, "kpt_shape", None)
@@ -148,6 +220,11 @@ class YoloNode(LifecycleNode):
                     f"Pose model detected ({kpt_shape[0]} keypoints) but keypoint_name_list is empty — "
                     "no keypoints will be published"
                 )
+
+    def _reset_tracking_state(self) -> None:
+        predictor = getattr(getattr(self, "_predictor", None), "predictor", None)
+        if predictor is not None and hasattr(predictor, "trackers"):
+            delattr(predictor, "trackers")
 
     def _release_predictor(self) -> None:
         model = getattr(self, "_predictor", None)
@@ -244,8 +321,18 @@ class YoloNode(LifecycleNode):
                 next_fuse = bool(param.value)
                 should_reload = True
             elif param.name == "filter_classes":
-                self.filter_classes = param.value
+                self.filter_classes = list(param.value)
                 self._warn_filter_classes_ignored()
+                self._log_filter_class_ids()
+                self._reset_tracking_state()
+            elif param.name == "use_detection_filter":
+                self.use_detection_filter = bool(param.value)
+                self._warn_filter_classes_ignored()
+                self._log_filter_class_ids()
+                self._reset_tracking_state()
+                self.get_logger().info(
+                    f"Updated use_detection_filter: {self.use_detection_filter}"
+                )
             elif param.name == "keypoint_name_list":
                 self.keypoint_name_list = list(param.value)
                 self._validate_keypoint_name_list()
@@ -262,6 +349,36 @@ class YoloNode(LifecycleNode):
                     return SetParametersResult(successful=False, reason="iou must be in (0.0, 1.0]")
                 self.iou = value
                 self.get_logger().info(f"Updated iou: {self.iou}")
+            elif param.name == "yolo_mode":
+                value = str(param.value)
+                if value not in self._MODE_CHOICES:
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f"yolo_mode must be one of {self._MODE_CHOICES}",
+                    )
+                self.yolo_mode = value
+                self.use_tracking = self.yolo_mode == "track"
+                self.get_logger().info(f"Updated yolo_mode: {self.yolo_mode}")
+            elif param.name == "use_tracking":
+                self.use_tracking = bool(param.value)
+                self.yolo_mode = "track" if self.use_tracking else "detect"
+                self.get_logger().info(f"Updated use_tracking: {self.use_tracking}")
+                self.get_logger().info(f"Updated yolo_mode: {self.yolo_mode}")
+            elif param.name == "tracker":
+                if self._state_machine.current_state[1] == "active":
+                    return SetParametersResult(
+                        successful=False,
+                        reason="tracker cannot be changed while active; deactivate first",
+                    )
+                value = str(param.value)
+                if value not in self._TRACKER_CHOICES:
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f"tracker must be one of {self._TRACKER_CHOICES}",
+                    )
+                self.tracker = value
+                self._reset_tracking_state()
+                self.get_logger().info(f"Updated tracker: {self.tracker}")
             elif param.name == "image_reliability":
                 if self._state_machine.current_state[1] == "active":
                     return SetParametersResult(
@@ -342,14 +459,27 @@ class YoloNode(LifecycleNode):
         self.convert_to_ros_msg(results, msg.header)
 
     def predict(self, cv_image):
-        results = self._predictor.predict(
+        classes = self._filter_class_ids()
+        if self.yolo_mode == "track":
+            return self._predictor.track(
+                source=cv_image,
+                conf=self.conf,
+                iou=self.iou,
+                classes=classes,
+                device=self.device,
+                tracker=self.tracker,
+                persist=True,
+                verbose=False
+            )
+
+        return self._predictor.predict(
             source=cv_image,
             conf=self.conf,
             iou=self.iou,
+            classes=classes,
             device=self.device,
             verbose=False
         )
-        return results
 
     def convert_to_ros_msg(self, results, header):
         result = results[0]
@@ -362,19 +492,20 @@ class YoloNode(LifecycleNode):
         kp_array = KeyPointArray(header=header)
         mask_array = DetectMaskArray(header=header)
 
-        active_filter_classes = [name for name in self.filter_classes if name]
+        active_filter_classes = self._active_filter_classes()
         for i, box in enumerate(result.boxes):
             cls_value = self._extract_scalar_value(box.cls)
             cls_idx = int(cls_value)
             label = result.names[cls_idx]
             score_value = self._extract_scalar_value(box.conf)
             score = float(score_value)
+            track_id = self._extract_track_id(box)
 
             if active_filter_classes and label not in active_filter_classes:
                 continue
 
             det = Detection2D(header=header)
-            det.id = label
+            det.id = label if track_id is None else f"{label}:{track_id}"
             det.bbox.center.position.x = float(box.xywh[0][0])
             det.bbox.center.position.y = float(box.xywh[0][1])
             det.bbox.size_x = float(box.xywh[0][2])
@@ -395,7 +526,7 @@ class YoloNode(LifecycleNode):
                 kp_array.key_points_array.append(kp)
 
             if result.masks is not None:
-                mask = DetectMask(instance_id=label)
+                mask = DetectMask(instance_id=det.id)
                 mask.results.append(hyp)
                 mask.pixel_x = [int(x) for x in result.masks[i].xy[0][:, 0]]
                 mask.pixel_y = [int(y) for y in result.masks[i].xy[0][:, 1]]
@@ -419,6 +550,18 @@ class YoloNode(LifecycleNode):
             return value[0]
         except (TypeError, IndexError, KeyError):
             return value
+
+    @classmethod
+    def _extract_track_id(cls, box):
+        """Return the tracker id from an Ultralytics box when tracking is active."""
+        track_id = getattr(box, "id", None)
+        if track_id is None:
+            return None
+
+        try:
+            return int(cls._extract_scalar_value(track_id))
+        except (TypeError, ValueError):
+            return None
 
 
 def main(args=None):

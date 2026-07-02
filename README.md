@@ -36,6 +36,7 @@
 - Object detection (`Detection2DArray`)
 - Human pose estimation (`KeyPointArray`)
 - Instance segmentation (`DetectMaskArray`)
+- YOLO tracking (BoT-SORT / ByteTrack with `track_id` in `Detection2DArray`)
 - Prompt-based detection and segmentation with YOLOE
 - Conv+BN layer fusion for faster inference (`fuse`)
 - Full ROS 2 lifecycle support (`configure` → `activate` → `deactivate` → `cleanup`)
@@ -80,33 +81,57 @@
 
 ## Usage
 
-1. Launch with your camera topic:
+### Start with launch-time configuration
+
+1. Start in detection mode:
    ```sh
-   ros2 launch yolo_ros yolo.launch.py image_topic_name:=/camera/color/image_raw
+   ros2 launch yolo_ros yolo.launch.py image_topic_name:=/camera/color/image_raw mode:=detect
    ```
 
-2. Launch with auto configure and activate:
+2. Start in tracking mode:
+   ```sh
+   ros2 launch yolo_ros yolo.launch.py image_topic_name:=/camera/color/image_raw mode:=track tracker:=botsort.yaml
+   ```
+
+   `tracker` can be `botsort.yaml` or `bytetrack.yaml`.
+
+3. Auto configure and activate are `true` by default at launch time:
    ```sh
    ros2 launch yolo_ros yolo.launch.py auto_configure_2d:=true auto_activate_2d:=true
    ```
 
-3. Or manage the lifecycle manually:
+4. Enable 3D coordinate pipelines:
    ```sh
-   ros2 launch yolo_ros yolo.launch.py
+   ros2 launch yolo_ros yolo.launch.py use_bbox_to_3d:=true use_keypoint_to_3d:=false use_mask_to_3d:=false
+   ```
+
+### Switch after startup with lifecycle / param
+
+1. Manage the lifecycle manually:
+   ```sh
+   ros2 launch yolo_ros yolo.launch.py auto_configure_2d:=false auto_activate_2d:=false
    ros2 lifecycle set /yolo_node configure
    ros2 lifecycle set /yolo_node activate
    ```
 
-4. Switch model at runtime (deactivate first — fusing is irreversible):
+2. Switch models at runtime (`weight_file` and `tracker` require deactivate first):
    ```sh
    ros2 lifecycle set /yolo_node deactivate
    ros2 param set /yolo_node weight_file yolo26n-pose.pt
    ros2 lifecycle set /yolo_node activate
    ```
 
-5. Enable 3D coordinate pipelines:
+3. Switch to tracking mode:
    ```sh
-   ros2 launch yolo_ros yolo.launch.py use_bbox_to_3d:=true use_keypoint_to_3d:=false use_mask_to_3d:=false
+   ros2 lifecycle set /yolo_node deactivate
+   ros2 param set /yolo_node yolo_mode track
+   ros2 param set /yolo_node tracker botsort.yaml
+   ros2 lifecycle set /yolo_node activate
+   ```
+
+4. Switch back to detection mode:
+   ```sh
+   ros2 param set /yolo_node yolo_mode detect
    ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -116,27 +141,33 @@
 
 The following parameters can be set via the launch file or `ros2 param set` at runtime.
 
-| Parameter            | Description                                                                                   | Default                        | Runtime update  |
-| -------------------- | --------------------------------------------------------------------------------------------- | ------------------------------ | --------------- |
-| `weight_file`        | YOLO weight filename                                                                          | `yolo26n.pt`                   | inactive only   |
-| `weights_path`       | Directory containing the weight file                                                          | `<package>/weights`            | inactive only   |
-| `conf`               | Detection confidence threshold (0.0, 1.0]                                                     | `0.35`                         | yes             |
-| `iou`                | NMS IoU threshold (0.0, 1.0]                                                                  | `0.7`                          | yes             |
-| `filter_classes`     | Class names to keep (empty = all classes)                                                     | `['']`                         | yes             |
-| `keypoint_name_list` | Keypoint names for pose models (positional, max = model keypoint count)                       | `['']`                         | yes             |
-| `yoloe_prompts`      | Text prompts for YOLOE models (required when using YOLOE)                                     | `['']`                         | yes             |
-| `image_reliability`  | QoS reliability for the image subscription (`best_effort`, `reliable`, `system_default`, ...) | `best_effort`                  | inactive only   |
-| `device`             | Inference device (`cuda`, `cpu`, `cuda:0`, ...)                                               | `cuda` if available else `cpu` | inactive only   |
-| `fuse`               | Fuse Conv+BN layers after load for faster inference                                           | `true`                         | inactive only   |
-| `auto_configure_2d`  | Configure the YOLO lifecycle node on startup                                                  | `false`                        | —               |
-| `auto_activate_2d`   | Activate the YOLO lifecycle node on startup                                                   | `false`                        | —               |
-| `auto_configure_3d`  | Configure the image_to_position lifecycle node on startup                                     | `false`                        | —               |
-| `auto_activate_3d`   | Activate the image_to_position lifecycle node on startup                                      | `false`                        | —               |
-| `use_bbox_to_3d`     | Launch the `bbox_to_3d` 3D detection pipeline                                                 | `true`                         | —               |
-| `use_keypoint_to_3d` | Launch the `keypoint_to_3d` 3D pipeline                                                       | `false`                        | —               |
-| `use_mask_to_3d`     | Launch the `mask_to_3d` 3D pipeline                                                           | `false`                        | —               |
+`mode:=detect|track` is the launch-time mode selector. `mode:=detect` uses `predict()` and `mode:=track` uses `track()`. Inside the node, the same meaning is exposed as the `yolo_mode` parameter, so you can switch with `ros2 param set /yolo_node yolo_mode track` or `detect`. `tracker` is the tracker selection used only in tracking mode, and can be `botsort.yaml` or `bytetrack.yaml`.
 
-> **Note:** `weight_file`, `weights_path`, `device`, `fuse`, and `image_reliability` require the node to be `inactive` (deactivated) before changing.
+| Parameter              | Description                                                                                     | Default                        | Runtime update  |
+| ---------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------ | --------------- |
+| `weight_file`          | YOLO weight filename                                                                            | `yolo26n.pt`                   | inactive only   |
+| `weights_path`         | Directory containing the weight file                                                            | `<package>/weights`            | inactive only   |
+| `conf`                 | Detection confidence threshold (0.0, 1.0]                                                       | `0.5`                         | yes             |
+| `iou`                  | NMS IoU threshold (0.0, 1.0]                                                                    | `0.7`                          | yes             |
+| `yolo_mode`            | Node execution mode. `detect` uses `predict()` and `track` uses `track()`                      | `detect`                       | yes             |
+| `tracker`              | Ultralytics tracker config used in tracking mode (`botsort.yaml` or `bytetrack.yaml`)          | `botsort.yaml`                 | inactive only   |
+| `use_tracking`         | Legacy compatibility parameter. `true` maps to `track`, `false` maps to `detect`              | `false`                        | yes             |
+| `use_detection_filter` | Whether to use `filter_classes` provided from `config/detection_filters.yaml` or elsewhere     | `true`                         | yes             |
+| `filter_classes`       | Class names to keep for YOLO detection, visualization, and tracking (empty or only empty strings = all classes) | `['person', 'bottle']` | yes             |
+| `keypoint_name_list`   | Keypoint names for pose models (positional, max = model keypoint count)                         | `['']`                         | yes             |
+| `yoloe_prompts`        | Text prompts for YOLOE models (required when using YOLOE)                                       | `['']`                         | yes             |
+| `image_reliability`    | QoS reliability for the image subscription (`best_effort`, `reliable`, `system_default`, ...)  | `best_effort`                  | inactive only   |
+| `device`               | Inference device (`cuda`, `cpu`, `cuda:0`, ...)                                                 | `cuda` if available else `cpu` | inactive only   |
+| `fuse`                 | Fuse Conv+BN layers after load for faster inference                                             | `true`                         | inactive only   |
+| `auto_configure_2d`    | Configure the YOLO lifecycle node on startup                                                    | `true`                         | —               |
+| `auto_activate_2d`     | Activate the YOLO lifecycle node on startup                                                     | `true`                         | —               |
+| `auto_configure_3d`    | Configure the image_to_position lifecycle node on startup                                       | `false`                        | —               |
+| `auto_activate_3d`     | Activate the image_to_position lifecycle node on startup                                        | `false`                        | —               |
+| `use_bbox_to_3d`       | Launch the `bbox_to_3d` 3D detection pipeline                                                   | `false`                        | —               |
+| `use_keypoint_to_3d`   | Launch the `keypoint_to_3d` 3D pipeline                                                         | `false`                        | —               |
+| `use_mask_to_3d`       | Launch the `mask_to_3d` 3D pipeline                                                             | `false`                        | —               |
+
+> **Note:** `weight_file`, `weights_path`, `device`, `fuse`, `image_reliability`, and `tracker` require the node to be `inactive` (deactivated) before changing.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -158,7 +189,7 @@ The following parameters can be set via the launch file or `ros2 param set` at r
 | -------------------- | ----------------------- | ------------------ |
 | `<image_topic_name>` | `sensor_msgs/Image`     | Input camera image |
 
-> `<node>` defaults to `yolo_node`. Override with the `node_name` launch argument.
+> `<node>` defaults to `yolo_node`. Override with the `node_name` launch argument. When tracking is enabled, `Detection2D.id` and `DetectMask.instance_id` contain `class_name:track_id`, such as `person:1`. The class name is also kept in `Detection2D.results[].hypothesis.class_id`.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -199,6 +230,44 @@ ros2 param set /yolo_node weight_file yoloe-26n-seg.pt
 ros2 param set /yolo_node yoloe_prompts "['bottle', 'laptop']"
 ros2 lifecycle set /yolo_node activate
 ```
+
+### YOLO Tracking
+Start directly in tracking mode:
+```bash
+ros2 launch yolo_ros yolo.launch.py mode:=track tracker:=botsort.yaml
+```
+
+To use ByteTrack:
+```bash
+ros2 launch yolo_ros yolo.launch.py mode:=track tracker:=bytetrack.yaml
+```
+
+To switch into tracking mode after startup:
+```bash
+ros2 lifecycle set /yolo_node deactivate
+ros2 param set /yolo_node yolo_mode track
+ros2 param set /yolo_node tracker botsort.yaml
+ros2 lifecycle set /yolo_node activate
+```
+
+To track only people:
+```bash
+ros2 param set /yolo_node filter_classes "['person']"
+```
+
+To track multiple classes:
+```bash
+ros2 param set /yolo_node filter_classes "['person', 'car']"
+```
+
+To temporarily return to all classes:
+```bash
+ros2 param set /yolo_node use_detection_filter false
+```
+
+`filter_classes` can be kept in `config/detection_filters.yaml`. When `use_detection_filter:=true`, class names are resolved through the model `names` and passed to `predict()` / `track()` as the YOLO `classes` argument. When `use_detection_filter:=false`, `filter_classes` is ignored and all model classes are used.
+
+The `track_id` stored in `Detection2D.id` and `DetectMask.instance_id` is a short-term tracking ID while the same object remains continuously visible. The same physical object may receive a new `track_id` after deactivate / activate, changing `tracker`, changing `filter_classes`, changing `use_detection_filter`, or disappearing from view long enough to be reacquired later. YOLO tracking is not a re-identification system, so persistent identity across those events is not guaranteed.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
