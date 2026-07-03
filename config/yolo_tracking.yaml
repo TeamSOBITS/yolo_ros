@@ -1,7 +1,7 @@
 # config/yolo_tracking.yaml
 /**:
   ros__parameters:
-    use_bytetrack: true
+    use_bytetrack: false
     use_botsort: false
     use_ocsort: false
     use_deepocsort: false

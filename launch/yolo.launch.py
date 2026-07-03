@@ -105,7 +105,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "iou",
-            default_value="0.7",
+            default_value="1.0",
             description="IoU threshold",
         ),
         DeclareLaunchArgument(
@@ -140,7 +140,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "use_tracking",
-            default_value="false", 
+            default_value="true", 
             description="Whether to activate YOLO tracking", 
         ),
     ]
