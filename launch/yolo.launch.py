@@ -28,6 +28,7 @@ def generate_launch_description():
     use_bbox_to_3d = LaunchConfiguration("use_bbox_to_3d")
     use_keypoint_to_3d = LaunchConfiguration("use_keypoint_to_3d")
     use_mask_to_3d = LaunchConfiguration("use_mask_to_3d")
+    use_tracking = LaunchConfiguration("use_tracking") # 追加: トラッキングの有効/無効フラグ
 
     launch_args = [
         DeclareLaunchArgument(
@@ -43,14 +44,14 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "image_topic_name",
             description="ROS Topic Name of sensor_msgs/msg/Image message. (sensor_msgs/msg/Image)",
-            default_value="camera/color/image_raw",          ## realsense
+            default_value="/image_raw",          ## realsense
             # default_value="rgb/image_raw",                   ## azure_kinect
             # default_value="camera/color/image_raw",          ## orbbec_series ##
             # default_value="camera/rgb/image_raw",            ## xtion
         ),
         DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo26m.pt",       # YOLOv26
+            default_value="yolo26n.pt",       # YOLOv26
             # default_value="yolo26m-pose.pt",  # KeyPoint model
             # default_value="yolo26m-seg.pt",   # Segmentation
             # default_value="yolo26m-sem.pt",   # Semantic Segmentation
@@ -137,6 +138,11 @@ def generate_launch_description():
             default_value="false",
             description="Whether to activate mask_to_3d",
         ),
+        DeclareLaunchArgument(
+            "use_tracking",
+            default_value="false", 
+            description="Whether to activate YOLO tracking", 
+        ),
     ]
 
     yoloe_prompts = os.path.join(
@@ -157,6 +163,12 @@ def generate_launch_description():
         "key_point_dictionary.yaml"
     )
 
+    yolo_tracking = os.path.join(
+        get_package_share_directory("yolo_ros"),
+        "config",
+        "yolo_tracking.yaml"
+    )
+
     yolo_node_cmd = Node(
         package="yolo_ros",
         executable="yolo_node",
@@ -174,10 +186,12 @@ def generate_launch_description():
                 "image_reliability": image_reliability,
                 "device": device,
                 "fuse": fuse,
+                "use_tracking": use_tracking, 
             },
             yoloe_prompts,
             detection_filters,
             keypoint_dictionary,
+            yolo_tracking, 
         ],
         output="screen"
     )

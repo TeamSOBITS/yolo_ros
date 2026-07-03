@@ -1,0 +1,17 @@
+# config/yolo_tracking.yaml
+/**:
+  ros__parameters:
+    use_bytetrack: true
+    use_botsort: false
+    use_ocsort: false
+    use_deepocsort: false
+    use_fasttrack: false
+    use_tracktrack: false
+    
+    # Tracking configurations
+    persist: true
+    
+    # Visualization configurations
+    line_width: 2
+    draw_trails: true
+    trail_length: 30

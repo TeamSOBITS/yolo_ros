@@ -2,6 +2,8 @@ import gc
 import os
 import torch
 import rclpy
+import cv2
+from collections import defaultdict
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
 from rcl_interfaces.msg import SetParametersResult
@@ -41,6 +43,20 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("image_reliability", "best_effort")
         self.declare_parameter("device", "cuda" if torch.cuda.is_available() else "cpu")
         self.declare_parameter("fuse", True)
+
+        self.declare_parameter("use_tracking", False)
+        self.declare_parameter("use_bytetrack", True)
+        self.declare_parameter("use_botsort", False)
+        self.declare_parameter("use_ocsort", False)
+        self.declare_parameter("use_deepocsort", False)
+        self.declare_parameter("use_fasttrack", False)
+        self.declare_parameter("use_tracktrack", False)
+        self.declare_parameter("persist", True)
+        self.declare_parameter("line_width", 2)
+        self.declare_parameter("draw_trails", True)
+        self.declare_parameter("trail_length", 30)
+
+        self.track_history = defaultdict(lambda: [])
 
         self._cv_bridge = CvBridge()
         self._predictor = None
@@ -82,6 +98,28 @@ class YoloNode(LifecycleNode):
         self.device = self.get_parameter("device").get_parameter_value().string_value
         self.fuse = self.get_parameter("fuse").get_parameter_value().bool_value
 
+        self.use_tracking = self.get_parameter("use_tracking").get_parameter_value().bool_value
+        self.persist = self.get_parameter("persist").get_parameter_value().bool_value
+        self.line_width = self.get_parameter("line_width").get_parameter_value().integer_value
+        self.draw_trails = self.get_parameter("draw_trails").get_parameter_value().bool_value
+        self.trail_length = self.get_parameter("trail_length").get_parameter_value().integer_value
+        
+        if self.get_parameter("use_botsort").get_parameter_value().bool_value:
+            self.tracker_type = "botsort.yaml"
+        elif self.get_parameter("use_ocsort").get_parameter_value().bool_value:
+            self.tracker_type = "ocsort.yaml"
+        elif self.get_parameter("use_deepocsort").get_parameter_value().bool_value:
+            self.tracker_type = "deepocsort.yaml"
+        elif self.get_parameter("use_fasttrack").get_parameter_value().bool_value:
+            self.tracker_type = "fasttrack.yaml"
+        elif self.get_parameter("use_tracktrack").get_parameter_value().bool_value:
+            self.tracker_type = "tracktrack.yaml"
+        else:
+            self.tracker_type = "bytetrack.yaml"
+
+        if not 0.0 < self.conf <= 1.0:
+            self.get_logger().error(f"conf must be in (0.0, 1.0], got {self.conf}")
+
         if not 0.0 < self.conf <= 1.0:
             self.get_logger().error(f"conf must be in (0.0, 1.0], got {self.conf}")
             return TransitionCallbackReturn.FAILURE
@@ -105,6 +143,8 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"Image reliability: {self.image_reliability}")
         self.get_logger().info(f"Device: {self.device}")
         self.get_logger().info(f"Fuse: {self.fuse}")
+        self.get_logger().info(f"Use Tracking: {self.use_tracking}")
+        self.get_logger().info(f"Tracker Type: {self.tracker_type}")
 
         if not self.load_model():
             return TransitionCallbackReturn.FAILURE
@@ -342,19 +382,39 @@ class YoloNode(LifecycleNode):
         self.convert_to_ros_msg(results, msg.header)
 
     def predict(self, cv_image):
-        results = self._predictor.predict(
-            source=cv_image,
-            conf=self.conf,
-            iou=self.iou,
-            device=self.device,
-            verbose=False
-        )
+        if self.use_tracking:
+            results = self._predictor.track(
+                source=cv_image, conf=self.conf, iou=self.iou, device=self.device,
+                persist=self.persist, tracker=self.tracker_type, verbose=False
+            )
+        else:
+            results = self._predictor.predict(
+                source=cv_image, conf=self.conf, iou=self.iou, device=self.device, verbose=False
+            )
         return results
 
     def convert_to_ros_msg(self, results, header):
         result = results[0]
+        annotated_frame = result.plot(line_width=self.line_width)
 
-        annotated_frame = result.plot()
+        track_ids = None
+        if self.use_tracking and self.draw_trails and result.boxes is not None and result.boxes.id is not None:
+            boxes = result.boxes.xywh.cpu().numpy()
+            track_ids = result.boxes.id.cpu().numpy()
+
+            for box, track_id in zip(boxes, track_ids):
+                x, y, w, h = box
+                center = (float(x), float(y))
+                self.track_history[track_id].append(center)
+                if len(self.track_history[track_id]) > self.trail_length:
+                    self.track_history[track_id].pop(0)
+
+                points = self.track_history[track_id]
+                for i in range(1, len(points)):
+                    pt1 = (int(points[i - 1][0]), int(points[i - 1][1]))
+                    pt2 = (int(points[i][0]), int(points[i][1]))
+                    cv2.line(annotated_frame, pt1, pt2, (0, 255, 0), self.line_width)
+
         det_img = self._cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
         det_img.header = header
 
@@ -363,6 +423,9 @@ class YoloNode(LifecycleNode):
         mask_array = DetectMaskArray(header=header)
 
         active_filter_classes = [name for name in self.filter_classes if name]
+        if self.use_tracking and result.boxes is not None and result.boxes.id is not None:
+            track_ids = result.boxes.id.cpu().numpy()
+
         for i, box in enumerate(result.boxes):
             cls_value = self._extract_scalar_value(box.cls)
             cls_idx = int(cls_value)
@@ -374,16 +437,20 @@ class YoloNode(LifecycleNode):
                 continue
 
             det = Detection2D(header=header)
-            det.id = label
+            if track_ids is not None:
+                track_id = int(track_ids[i])
+                det.id = f"{label}_{track_id}"
+            else:
+                det.id = label
+                
             det.bbox.center.position.x = float(box.xywh[0][0])
             det.bbox.center.position.y = float(box.xywh[0][1])
             det.bbox.size_x = float(box.xywh[0][2])
             det.bbox.size_y = float(box.xywh[0][3])
 
             hyp = ObjectHypothesisWithPose()
-            hyp.hypothesis.class_id = label
+            hyp.hypothesis.class_id = det.id
             hyp.hypothesis.score = score
-
             det.results.append(hyp)
             det_array.detections.append(det)
 
@@ -402,7 +469,6 @@ class YoloNode(LifecycleNode):
                 mask_array.masks.append(mask)
 
         self._pub_img.publish(det_img)
-
         if len(det_array.detections) > 0:
             self._pub_rect.publish(det_array)
         if len(kp_array.key_points_array) > 0:
@@ -447,8 +513,14 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     main()
