@@ -28,6 +28,7 @@ def generate_launch_description():
     tracker_with_reid = LaunchConfiguration("tracker_with_reid")
     tracker_reid_model = LaunchConfiguration("tracker_reid_model")
     tracker_reid_weights_path = LaunchConfiguration("tracker_reid_weights_path")
+    draw_trails = LaunchConfiguration("draw_trails")
     use_detection_filter = LaunchConfiguration("use_detection_filter")
     image_reliability = LaunchConfiguration("image_reliability")
     device = LaunchConfiguration("device")
@@ -59,8 +60,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo26m.pt",       # YOLOv26
-            # default_value="yolo26m-pose.pt",  # KeyPoint model
+            # default_value="yolo26m.pt",       # YOLOv26
+            default_value="yolo26m-pose.pt",  # KeyPoint model
             # default_value="yolo26m-seg.pt",   # Segmentation
             # default_value="yolo26m-sem.pt",   # Semantic Segmentation
             # default_value="yoloe-26m-seg.pt", # YOLO-E segmentation
@@ -148,6 +149,11 @@ def generate_launch_description():
             description="Whether to enable ReID for BoT-SORT, Deep OC-SORT, or TrackTrack",
         ),
         DeclareLaunchArgument(
+            "draw_trails",
+            default_value="true",
+            description="Whether to draw trajectory trails for tracked objects",
+        ),
+        DeclareLaunchArgument(
             "use_detection_filter",
             default_value="true",
             description="Use filter_classes from detection_filters.yaml",
@@ -225,6 +231,7 @@ def generate_launch_description():
                 "tracker_with_reid": tracker_with_reid,
                 "tracker_reid_model": tracker_reid_model,
                 "tracker_reid_weights_path": tracker_reid_weights_path,
+                "draw_trails": draw_trails,
                 "use_detection_filter": use_detection_filter,
                 "image_reliability": image_reliability,
                 "device": device,

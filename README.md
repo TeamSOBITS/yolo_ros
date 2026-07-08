@@ -141,8 +141,6 @@
 
 以下のパラメーターはランチファイルまたは `ros2 param set` で設定できます．
 
-`mode:=detect|track` は launch 引数です．`mode:=detect` は `predict()`，`mode:=track` は `track()` を使います．ノード本体では同じ意味を `yolo_mode` パラメーターで持ち，`ros2 param set /yolo_node yolo_mode track` / `detect` で切り替えます．一方，`tracker` は tracking モードで使うトラッカー種別の指定で，`botsort.yaml`，`bytetrack.yaml`，`ocsort.yaml`，`deepocsort.yaml`，`fasttrack.yaml`，`tracktrack.yaml` を選びます．BoT-SORT，Deep OC-SORT，TrackTrack では `tracker_with_reid` と `tracker_reid_model` で ReID を有効化できます．
-
 | パラメーター名         | 説明                                                                                          | デフォルト値                        | ランタイム変更  |
 | ---------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------- | --------------- |
 | `weight_file`          | YOLO の重みファイル名                                                                         | `yolo26n.pt`                        | inactive 時のみ |
@@ -254,7 +252,7 @@ ros2 launch yolo_ros yolo.launch.py mode:=track tracker:=tracktrack.yaml tracker
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node yolo_mode track
-ros2 param set /yolo_node tracker botsort.yaml
+ros2 param set /yolo_node tracker tracktrack.yaml
 ros2 lifecycle set /yolo_node activate
 ```
 
@@ -268,9 +266,9 @@ ros2 param set /yolo_node filter_classes "['person']"
 ros2 param set /yolo_node use_detection_filter false
 ```
 
-`filter_classes` は `config/detection_filters.yaml` にまとめて設定できます．`use_detection_filter:=true` のとき，指定したクラス名はモデルの `names` からクラス ID に変換され，YOLO の `classes` 引数として `predict()` / `track()` に渡されます．`use_detection_filter:=false` のときは `filter_classes` を無視して全クラスを対象にします．
+`filter_classes` は `config/detection_filters.yaml` で設定できます．`use_detection_filter:=true` のときだけ有効で，`false` にすると全クラスを対象にします．
 
-`Detection2D.id` と `DetectMask.instance_id` の `track_id` は，同じ物体が短時間連続して見えているあいだの追跡用 ID です．ノードの deactivate / activate，`tracker` の変更，`filter_classes` の変更，`use_detection_filter` の変更，物体が長く画角外へ出たあとの再登場などでは，同じ物体でも `track_id` が再割り当てされることがあります．YOLO tracking は再識別機能ではないため，`track_id` の永続的な固定は保証しません．
+`track_id` は一時的な追跡 ID です．再起動，設定変更，再入場，見失い後の再検出では，同じ物体でも別 ID になることがあります．
 
 #### トラッキングの種類
 
@@ -283,15 +281,27 @@ ros2 param set /yolo_node use_detection_filter false
 | `fasttrack.yaml` | ByteTrack 系の軽さを保ちつつ，部分遮蔽に強くするための補正を入れた高速寄りの方式です． |
 | `tracktrack.yaml` | 複数の手がかりを組み合わせて対応付けを行う方式です．混雑や移動カメラ環境で，より粘り強く ID を維持したい場合の候補です． |
 
-これらの tracker YAML は，このパッケージの `config/` からではなく，`pip install ultralytics` で入る Ultralytics パッケージ側の built-in 設定を使っています．この `yolo_ros` パッケージでは `tracker:=bytetrack.yaml` のようにファイル名だけを渡し，Ultralytics 側がインストール済みの tracker YAML を探して読み込みます．
+`mode:=detect|track` で検出と追跡を切り替えます．`track` のときだけ `tracker` が使われ，`botsort.yaml`，`bytetrack.yaml`，`ocsort.yaml`，`deepocsort.yaml`，`fasttrack.yaml`，`tracktrack.yaml` を選べます．BoT-SORT，Deep OC-SORT，TrackTrack では `tracker_with_reid` と `tracker_reid_model` で ReID も使えます．
 
-BoT-SORT，Deep OC-SORT，TrackTrack で ReID を使う場合は，検出モデルの `.pt` と同じように ReID モデルファイルも `weights/` に置いて管理できます．既定では `tracker_with_reid:=true`，`tracker_reid_model:=yolo26m-reid.onnx` なので，`<package>/weights/yolo26m-reid.onnx` を参照します．別の ReID モデルを使いたいときは，`.onnx`，`.engine`，`.torchscript`，`.openvino`，`.pt` を `tracker_reid_model` で指定し，必要に応じて `tracker_reid_weights_path` かフルパス指定で切り替えられます．
+これらの tracker YAML は `yolo_ros` の `config/` ではなく，Ultralytics 側の built-in 設定を使っています．`tracker:=bytetrack.yaml` のように名前だけを渡すと，Ultralytics がインストール済みの YAML を探して読み込みます．
 
-たとえばこの環境では，`bytetrack.yaml` は次の場所にあります．
+`bytetrack.yaml` は次の場所にあります．
 
 ```text
-/home/kurokara/.local/lib/python3.12/site-packages/ultralytics/cfg/trackers/bytetrack.yaml
+/home/user/.local/lib/python3.12/site-packages/ultralytics/cfg/trackers/bytetrack.yaml
 ```
+
+BoT-SORT，Deep OC-SORT，TrackTrack で ReID を使う場合は，ReID モデルも `weights/` に置いて管理できます．既定では `tracker_with_reid:=true`，`tracker_reid_model:=yolo26m-reid.onnx` です．別モデルを使うときは，`.onnx`，`.engine`，`.torchscript`，`.openvino`，`.pt` を `tracker_reid_model` で指定します．
+
+#### 導線
+
+`draw_trails:=true` で，`track_id` ごとの移動軌跡を描画します．
+
+```bash
+ros2 launch yolo_ros yolo.launch.py mode:=track draw_trails:=true
+```
+
+導線は tracking 専用です．不要なら `draw_trails:=false` で無効化できます．
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 

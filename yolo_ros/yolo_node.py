@@ -1,8 +1,10 @@
 import gc
 import os
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 
+import cv2
 import torch
 import rclpy
 import yaml
@@ -56,10 +58,16 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("tracker_with_reid", True)
         self.declare_parameter("tracker_reid_model", "yolo26m-reid.onnx")
         self.declare_parameter("tracker_reid_weights_path", "")
+        self.declare_parameter("draw_trails", True)
+        self.declare_parameter("trail_length", 30)
+        self.declare_parameter("line_width", 2)
         self.declare_parameter("use_detection_filter", True)
+        self.declare_parameter("use_keypoint_filter", True)
 
         self.declare_parameter("filter_classes", [""])
         self.declare_parameter("keypoint_name_list", [""])
+        self.declare_parameter("keypoint_filter_names", [""])
+        self.declare_parameter("keypoint_conf_threshold", 0.4)
         self.declare_parameter("yoloe_prompts", [""])
         self.declare_parameter("image_reliability", "best_effort")
         self.declare_parameter("device", "cuda" if torch.cuda.is_available() else "cpu")
@@ -86,14 +94,21 @@ class YoloNode(LifecycleNode):
         self.tracker_reid_weights_path = ""
         self._tracker_runtime_config = "tracktrack.yaml"
         self._tracker_runtime_config_path = None
+        self.draw_trails = True
+        self.trail_length = 30
+        self.line_width = 2
         self.use_detection_filter = True
+        self.use_keypoint_filter = True
         self.filter_classes = [""]
         self.keypoint_name_list = [""]
+        self.keypoint_filter_names = [""]
+        self.keypoint_conf_threshold = 0.4
         self.yoloe_prompts = [""]
         self.image_reliability = "best_effort"
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.fuse = True
         self.image_qos_profile = None
+        self.track_history = defaultdict(list)
 
         self._param_cb = self.add_on_set_parameters_callback(self.parameters_callback)
         self._param_cb_registered = True
@@ -117,10 +132,16 @@ class YoloNode(LifecycleNode):
         self.tracker_reid_weights_path = (
             self.get_parameter("tracker_reid_weights_path").get_parameter_value().string_value
         ) or self.weights_path
+        self.draw_trails = self.get_parameter("draw_trails").get_parameter_value().bool_value
+        self.trail_length = self.get_parameter("trail_length").get_parameter_value().integer_value
+        self.line_width = self.get_parameter("line_width").get_parameter_value().integer_value
         self.use_detection_filter = self.get_parameter("use_detection_filter").get_parameter_value().bool_value
+        self.use_keypoint_filter = self.get_parameter("use_keypoint_filter").get_parameter_value().bool_value
 
         self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
+        self.keypoint_filter_names = self.get_parameter("keypoint_filter_names").get_parameter_value().string_array_value
+        self.keypoint_conf_threshold = self.get_parameter("keypoint_conf_threshold").get_parameter_value().double_value
         self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
         self.image_reliability = self.get_parameter("image_reliability").get_parameter_value().string_value
         self.device = self.get_parameter("device").get_parameter_value().string_value
@@ -141,6 +162,17 @@ class YoloNode(LifecycleNode):
         if not tracker_valid:
             self.get_logger().error(tracker_reason)
             return TransitionCallbackReturn.FAILURE
+        if self.trail_length <= 0:
+            self.get_logger().error(f"trail_length must be > 0, got {self.trail_length}")
+            return TransitionCallbackReturn.FAILURE
+        if self.line_width <= 0:
+            self.get_logger().error(f"line_width must be > 0, got {self.line_width}")
+            return TransitionCallbackReturn.FAILURE
+        if not 0.0 < self.keypoint_conf_threshold <= 1.0:
+            self.get_logger().error(
+                f"keypoint_conf_threshold must be in (0.0, 1.0], got {self.keypoint_conf_threshold}"
+            )
+            return TransitionCallbackReturn.FAILURE
         if self.image_reliability not in self._RELIABILITY_MAP:
             self.get_logger().error(
                 f"image_reliability must be one of {list(self._RELIABILITY_MAP)}, got '{self.image_reliability}'"
@@ -159,9 +191,15 @@ class YoloNode(LifecycleNode):
         if self.tracker_with_reid:
             self.get_logger().info(f"Tracker ReID model: {self._resolve_tracker_reid_model()}")
             self.get_logger().info(f"Tracker ReID weights path: {self.tracker_reid_weights_path}")
+        self.get_logger().info(f"Draw trails: {self.draw_trails}")
+        self.get_logger().info(f"Trail length: {self.trail_length}")
+        self.get_logger().info(f"Line width: {self.line_width}")
         self.get_logger().info(f"Use detection filter: {self.use_detection_filter}")
+        self.get_logger().info(f"Use keypoint filter: {self.use_keypoint_filter}")
         self.get_logger().info(f"Filter classes: {self.filter_classes}")
         self.get_logger().info(f"Keypoint name list: {self.keypoint_name_list}")
+        self.get_logger().info(f"Keypoint filter names: {self.keypoint_filter_names}")
+        self.get_logger().info(f"Keypoint conf threshold: {self.keypoint_conf_threshold}")
         self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
         self.get_logger().info(f"Image reliability: {self.image_reliability}")
         self.get_logger().info(f"Device: {self.device}")
@@ -173,7 +211,12 @@ class YoloNode(LifecycleNode):
             return TransitionCallbackReturn.FAILURE
 
         self._validate_keypoint_name_list()
+        keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+        if not keypoint_filter_valid:
+            self.get_logger().error(keypoint_filter_reason)
+            return TransitionCallbackReturn.FAILURE
         self._warn_filter_classes_ignored()
+        self._warn_keypoint_filter_ignored()
         self._log_filter_class_ids()
 
         self.image_qos_profile = QoSProfile(
@@ -252,6 +295,81 @@ class YoloNode(LifecycleNode):
                     "no keypoints will be published"
                 )
 
+    def _active_keypoint_filter_names(self):
+        if not self.use_keypoint_filter:
+            return []
+        return [name for name in self.keypoint_filter_names if name]
+
+    def _validate_keypoint_filter_settings(self):
+        if not 0.0 < self.keypoint_conf_threshold <= 1.0:
+            return False, "keypoint_conf_threshold must be in (0.0, 1.0]"
+
+        active = self._active_keypoint_filter_names()
+        if not active:
+            return True, ""
+
+        kpt_shape = getattr(self._predictor, "kpt_shape", None)
+        if kpt_shape is None:
+            return False, "keypoint_filter_names requires a pose model with keypoints"
+
+        if len(self.keypoint_name_list) < kpt_shape[0]:
+            return False, (
+                f"keypoint_name_list must contain at least {kpt_shape[0]} names to use keypoint filtering"
+            )
+
+        missing = [name for name in active if name not in self.keypoint_name_list]
+        if missing:
+            return False, f"keypoint_filter_names contains unknown names: {missing}"
+        return True, ""
+
+    def _warn_keypoint_filter_ignored(self) -> None:
+        if not self.use_keypoint_filter:
+            return
+        active = self._active_keypoint_filter_names()
+        if active and getattr(self._predictor, "kpt_shape", None) is None:
+            self.get_logger().warn(
+                "use_keypoint_filter is true but this model has no keypoints — keypoint filtering will be ignored"
+            )
+
+    def _keypoint_filter_indices(self, result):
+        active = self._active_keypoint_filter_names()
+        if not active or result.keypoints is None or result.boxes is None:
+            return None
+
+        name_to_idx = {name: idx for idx, name in enumerate(self.keypoint_name_list)}
+        target_indices = [name_to_idx[name] for name in active]
+        conf = result.keypoints.conf
+        xy = result.keypoints.xy
+        keep_indices = []
+
+        for det_idx in range(len(result.boxes)):
+            visible = True
+            for kp_idx in target_indices:
+                if conf is not None:
+                    kp_conf = float(self._extract_scalar_value(conf[det_idx][kp_idx]))
+                    if kp_conf < self.keypoint_conf_threshold:
+                        visible = False
+                        break
+                else:
+                    point = xy[det_idx][kp_idx]
+                    x = float(self._extract_scalar_value(point[0]))
+                    y = float(self._extract_scalar_value(point[1]))
+                    if x <= 0.0 and y <= 0.0:
+                        visible = False
+                        break
+            if visible:
+                keep_indices.append(det_idx)
+
+        return keep_indices
+
+    def _apply_keypoint_filter(self, result):
+        keep_indices = self._keypoint_filter_indices(result)
+        if keep_indices is None:
+            return result
+        if len(keep_indices) == len(result.boxes):
+            return result
+        return result[keep_indices]
+
     def _supports_tracker_reid(self, tracker=None) -> bool:
         tracker_name = self.tracker if tracker is None else tracker
         return tracker_name in self._REID_TRACKER_CHOICES
@@ -327,6 +445,7 @@ class YoloNode(LifecycleNode):
             return False
 
     def _reset_tracking_state(self) -> None:
+        self.track_history.clear()
         predictor = getattr(getattr(self, "_predictor", None), "predictor", None)
         if predictor is not None and hasattr(predictor, "trackers"):
             delattr(predictor, "trackers")
@@ -443,10 +562,34 @@ class YoloNode(LifecycleNode):
                 self.get_logger().info(
                     f"Updated use_detection_filter: {self.use_detection_filter}"
                 )
+            elif param.name == "use_keypoint_filter":
+                self.use_keypoint_filter = bool(param.value)
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                if not keypoint_filter_valid:
+                    return SetParametersResult(successful=False, reason=keypoint_filter_reason)
+                self.get_logger().info(f"Updated use_keypoint_filter: {self.use_keypoint_filter}")
             elif param.name == "keypoint_name_list":
                 self.keypoint_name_list = list(param.value)
                 self._validate_keypoint_name_list()
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                if not keypoint_filter_valid:
+                    return SetParametersResult(successful=False, reason=keypoint_filter_reason)
                 self.get_logger().info(f"Updated keypoint_name_list: {self.keypoint_name_list}")
+            elif param.name == "keypoint_filter_names":
+                self.keypoint_filter_names = list(param.value)
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                if not keypoint_filter_valid:
+                    return SetParametersResult(successful=False, reason=keypoint_filter_reason)
+                self.get_logger().info(f"Updated keypoint_filter_names: {self.keypoint_filter_names}")
+            elif param.name == "keypoint_conf_threshold":
+                value = float(param.value)
+                if not 0.0 < value <= 1.0:
+                    return SetParametersResult(successful=False, reason="keypoint_conf_threshold must be in (0.0, 1.0]")
+                self.keypoint_conf_threshold = value
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                if not keypoint_filter_valid:
+                    return SetParametersResult(successful=False, reason=keypoint_filter_reason)
+                self.get_logger().info(f"Updated keypoint_conf_threshold: {self.keypoint_conf_threshold}")
             elif param.name == "conf":
                 value = float(param.value)
                 if not 0.0 < value <= 1.0:
@@ -468,12 +611,33 @@ class YoloNode(LifecycleNode):
                     )
                 self.yolo_mode = value
                 self.use_tracking = self.yolo_mode == "track"
+                self._reset_tracking_state()
                 self.get_logger().info(f"Updated yolo_mode: {self.yolo_mode}")
             elif param.name == "use_tracking":
                 self.use_tracking = bool(param.value)
                 self.yolo_mode = "track" if self.use_tracking else "detect"
+                self._reset_tracking_state()
                 self.get_logger().info(f"Updated use_tracking: {self.use_tracking}")
                 self.get_logger().info(f"Updated yolo_mode: {self.yolo_mode}")
+            elif param.name == "draw_trails":
+                self.draw_trails = bool(param.value)
+                if not self.draw_trails:
+                    self.track_history.clear()
+                self.get_logger().info(f"Updated draw_trails: {self.draw_trails}")
+            elif param.name == "trail_length":
+                value = int(param.value)
+                if value <= 0:
+                    return SetParametersResult(successful=False, reason="trail_length must be > 0")
+                self.trail_length = value
+                for track_id in list(self.track_history.keys()):
+                    self.track_history[track_id] = self.track_history[track_id][-self.trail_length :]
+                self.get_logger().info(f"Updated trail_length: {self.trail_length}")
+            elif param.name == "line_width":
+                value = int(param.value)
+                if value <= 0:
+                    return SetParametersResult(successful=False, reason="line_width must be > 0")
+                self.line_width = value
+                self.get_logger().info(f"Updated line_width: {self.line_width}")
             elif param.name == "tracker":
                 if self._state_machine.current_state[1] == "active":
                     return SetParametersResult(
@@ -575,6 +739,7 @@ class YoloNode(LifecycleNode):
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info("Deactivating...")
         self._destroy_subscription()
+        self.track_history.clear()
         return super().on_deactivate(state)
 
     def _remove_param_cb(self) -> None:
@@ -636,9 +801,23 @@ class YoloNode(LifecycleNode):
         )
 
     def convert_to_ros_msg(self, results, header):
-        result = results[0]
+        result = self._apply_keypoint_filter(results[0])
 
-        annotated_frame = result.plot()
+        annotated_frame = result.plot(line_width=self.line_width)
+        if self.use_tracking and self.draw_trails and result.boxes is not None and result.boxes.id is not None:
+            boxes = result.boxes.xywh.cpu().numpy()
+            track_ids = result.boxes.id.cpu().numpy()
+            for box, track_id in zip(boxes, track_ids):
+                center = (float(box[0]), float(box[1]))
+                history = self.track_history[int(track_id)]
+                history.append(center)
+                if len(history) > self.trail_length:
+                    history.pop(0)
+
+                for idx in range(1, len(history)):
+                    pt1 = (int(history[idx - 1][0]), int(history[idx - 1][1]))
+                    pt2 = (int(history[idx][0]), int(history[idx][1]))
+                    cv2.line(annotated_frame, pt1, pt2, (0, 255, 0), self.line_width)
         det_img = self._cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
         det_img.header = header
 
