@@ -25,6 +25,9 @@ def generate_launch_description():
     iou = LaunchConfiguration("iou")
     mode = LaunchConfiguration("mode")
     tracker = LaunchConfiguration("tracker")
+    tracker_with_reid = LaunchConfiguration("tracker_with_reid")
+    tracker_reid_model = LaunchConfiguration("tracker_reid_model")
+    tracker_reid_weights_path = LaunchConfiguration("tracker_reid_weights_path")
     use_detection_filter = LaunchConfiguration("use_detection_filter")
     image_reliability = LaunchConfiguration("image_reliability")
     device = LaunchConfiguration("device")
@@ -64,9 +67,22 @@ def generate_launch_description():
             description="Weight file name",
         ),
         DeclareLaunchArgument(
+            "tracker_reid_model",
+            default_value="yolo26m-reid.onnx",
+            description=(
+                "ReID model filename or path. Supports explicit files such as .onnx, .engine, "
+                ".torchscript, .openvino, or .pt when tracker_with_reid is true"
+            ),
+        ),
+        DeclareLaunchArgument(
             "weights_path",
             default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights"),
             description="Directory path where weight files are stored",
+        ),
+        DeclareLaunchArgument(
+            "tracker_reid_weights_path",
+            default_value=os.path.join(get_package_share_directory("yolo_ros"), "weights"),
+            description="Directory path where tracker ReID model files are stored",
         ),
         DeclareLaunchArgument(
             "bbox_to_3d_params_file",
@@ -115,17 +131,25 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "mode",
-            default_value="detect",
+            default_value="track",
             description="Inference mode: 'detect' uses predict(), 'track' uses track()",
         ),
         DeclareLaunchArgument(
             "tracker",
-            default_value="botsort.yaml",
-            description="Ultralytics tracker config: botsort.yaml or bytetrack.yaml",
+            default_value="tracktrack.yaml",
+            description=(
+                "Ultralytics tracker config: botsort.yaml, bytetrack.yaml, "
+                "ocsort.yaml, deepocsort.yaml, fasttrack.yaml, or tracktrack.yaml"
+            ),
+        ),
+        DeclareLaunchArgument(
+            "tracker_with_reid",
+            default_value="true",
+            description="Whether to enable ReID for BoT-SORT, Deep OC-SORT, or TrackTrack",
         ),
         DeclareLaunchArgument(
             "use_detection_filter",
-            default_value="false",
+            default_value="true",
             description="Use filter_classes from detection_filters.yaml",
         ),
         DeclareLaunchArgument(
@@ -198,6 +222,9 @@ def generate_launch_description():
                     value_type=bool,
                 ),
                 "tracker": tracker,
+                "tracker_with_reid": tracker_with_reid,
+                "tracker_reid_model": tracker_reid_model,
+                "tracker_reid_weights_path": tracker_reid_weights_path,
                 "use_detection_filter": use_detection_filter,
                 "image_reliability": image_reliability,
                 "device": device,

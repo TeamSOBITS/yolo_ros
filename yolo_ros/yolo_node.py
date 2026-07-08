@@ -1,7 +1,11 @@
 import gc
 import os
+import tempfile
+from pathlib import Path
+
 import torch
 import rclpy
+import yaml
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
 from rcl_interfaces.msg import SetParametersResult
@@ -13,11 +17,20 @@ from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithP
 from sobits_interfaces.msg import KeyPointArray, KeyPoint, DetectMaskArray, DetectMask
 
 from ultralytics import YOLO
+from ultralytics.utils.checks import check_yaml
 
 class YoloNode(LifecycleNode):
 
     _MODE_CHOICES = ("detect", "track")
-    _TRACKER_CHOICES = ("botsort.yaml", "bytetrack.yaml")
+    _TRACKER_CHOICES = (
+        "botsort.yaml",
+        "bytetrack.yaml",
+        "ocsort.yaml",
+        "deepocsort.yaml",
+        "fasttrack.yaml",
+        "tracktrack.yaml",
+    )
+    _REID_TRACKER_CHOICES = ("botsort.yaml", "deepocsort.yaml", "tracktrack.yaml")
 
     _RELIABILITY_MAP = {
         "best_effort": QoSReliabilityPolicy.BEST_EFFORT,
@@ -39,7 +52,10 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("iou", 0.7)
         self.declare_parameter("yolo_mode", "detect")
         self.declare_parameter("use_tracking", False)
-        self.declare_parameter("tracker", "botsort.yaml")
+        self.declare_parameter("tracker", "tracktrack.yaml")
+        self.declare_parameter("tracker_with_reid", True)
+        self.declare_parameter("tracker_reid_model", "yolo26m-reid.onnx")
+        self.declare_parameter("tracker_reid_weights_path", "")
         self.declare_parameter("use_detection_filter", True)
 
         self.declare_parameter("filter_classes", [""])
@@ -64,7 +80,12 @@ class YoloNode(LifecycleNode):
         self.iou = 0.7
         self.yolo_mode = "detect"
         self.use_tracking = False
-        self.tracker = "botsort.yaml"
+        self.tracker = "tracktrack.yaml"
+        self.tracker_with_reid = True
+        self.tracker_reid_model = "yolo26m-reid.onnx"
+        self.tracker_reid_weights_path = ""
+        self._tracker_runtime_config = "tracktrack.yaml"
+        self._tracker_runtime_config_path = None
         self.use_detection_filter = True
         self.filter_classes = [""]
         self.keypoint_name_list = [""]
@@ -91,6 +112,11 @@ class YoloNode(LifecycleNode):
             self.yolo_mode = "track" if self.use_tracking else "detect"
         self.use_tracking = self.yolo_mode == "track"
         self.tracker = self.get_parameter("tracker").get_parameter_value().string_value
+        self.tracker_with_reid = self.get_parameter("tracker_with_reid").get_parameter_value().bool_value
+        self.tracker_reid_model = self.get_parameter("tracker_reid_model").get_parameter_value().string_value or "auto"
+        self.tracker_reid_weights_path = (
+            self.get_parameter("tracker_reid_weights_path").get_parameter_value().string_value
+        ) or self.weights_path
         self.use_detection_filter = self.get_parameter("use_detection_filter").get_parameter_value().bool_value
 
         self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
@@ -111,10 +137,9 @@ class YoloNode(LifecycleNode):
                 f"yolo_mode must be one of {self._MODE_CHOICES}, got '{self.yolo_mode}'"
             )
             return TransitionCallbackReturn.FAILURE
-        if self.tracker not in self._TRACKER_CHOICES:
-            self.get_logger().error(
-                f"tracker must be one of {self._TRACKER_CHOICES}, got '{self.tracker}'"
-            )
+        tracker_valid, tracker_reason = self._validate_tracker_settings()
+        if not tracker_valid:
+            self.get_logger().error(tracker_reason)
             return TransitionCallbackReturn.FAILURE
         if self.image_reliability not in self._RELIABILITY_MAP:
             self.get_logger().error(
@@ -130,6 +155,10 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"YOLO mode: {self.yolo_mode}")
         self.get_logger().info(f"Use tracking: {self.use_tracking}")
         self.get_logger().info(f"Tracker: {self.tracker}")
+        self.get_logger().info(f"Tracker with ReID: {self.tracker_with_reid}")
+        if self.tracker_with_reid:
+            self.get_logger().info(f"Tracker ReID model: {self._resolve_tracker_reid_model()}")
+            self.get_logger().info(f"Tracker ReID weights path: {self.tracker_reid_weights_path}")
         self.get_logger().info(f"Use detection filter: {self.use_detection_filter}")
         self.get_logger().info(f"Filter classes: {self.filter_classes}")
         self.get_logger().info(f"Keypoint name list: {self.keypoint_name_list}")
@@ -139,6 +168,8 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"Fuse: {self.fuse}")
 
         if not self.load_model():
+            return TransitionCallbackReturn.FAILURE
+        if not self._prepare_tracker_runtime_config():
             return TransitionCallbackReturn.FAILURE
 
         self._validate_keypoint_name_list()
@@ -221,6 +252,80 @@ class YoloNode(LifecycleNode):
                     "no keypoints will be published"
                 )
 
+    def _supports_tracker_reid(self, tracker=None) -> bool:
+        tracker_name = self.tracker if tracker is None else tracker
+        return tracker_name in self._REID_TRACKER_CHOICES
+
+    def _resolve_tracker_reid_model(self, model_name=None, weights_path=None) -> str:
+        model = (self.tracker_reid_model if model_name is None else model_name) or "auto"
+        base_path = (self.tracker_reid_weights_path if weights_path is None else weights_path) or self.weights_path
+        if model == "auto":
+            return model
+
+        if os.path.isabs(model) or os.path.sep in model or (os.path.altsep and os.path.altsep in model):
+            return model
+        return os.path.join(base_path, model)
+
+    def _validate_tracker_settings(
+        self,
+        tracker=None,
+        tracker_with_reid=None,
+        tracker_reid_model=None,
+        tracker_reid_weights_path=None,
+    ):
+        tracker_name = self.tracker if tracker is None else tracker
+        use_reid = self.tracker_with_reid if tracker_with_reid is None else tracker_with_reid
+        model_name = self.tracker_reid_model if tracker_reid_model is None else tracker_reid_model
+        weights_path = self.tracker_reid_weights_path if tracker_reid_weights_path is None else tracker_reid_weights_path
+        weights_path = weights_path or self.weights_path
+
+        if tracker_name not in self._TRACKER_CHOICES:
+            return False, f"tracker must be one of {self._TRACKER_CHOICES}, got '{tracker_name}'"
+        if use_reid and not self._supports_tracker_reid(tracker_name):
+            return False, (
+                f"tracker_with_reid is supported only for {self._REID_TRACKER_CHOICES}, "
+                f"got '{tracker_name}'"
+            )
+
+        resolved_model = self._resolve_tracker_reid_model(model_name, weights_path)
+        if use_reid and resolved_model != "auto" and not os.path.exists(resolved_model):
+            return False, f"tracker_reid_model not found: {resolved_model}"
+        return True, ""
+
+    def _remove_tracker_runtime_config(self) -> None:
+        tracker_cfg_path = getattr(self, "_tracker_runtime_config_path", None)
+        if tracker_cfg_path and os.path.exists(tracker_cfg_path):
+            try:
+                os.unlink(tracker_cfg_path)
+            except OSError:
+                pass
+        self._tracker_runtime_config_path = None
+        self._tracker_runtime_config = self.tracker
+
+    def _prepare_tracker_runtime_config(self) -> bool:
+        self._remove_tracker_runtime_config()
+        self._tracker_runtime_config = self.tracker
+
+        if not self.tracker_with_reid:
+            return True
+
+        try:
+            tracker_cfg_path = Path(check_yaml(self.tracker))
+            tracker_cfg = yaml.safe_load(tracker_cfg_path.read_text())
+            tracker_cfg["with_reid"] = True
+            tracker_cfg["model"] = self._resolve_tracker_reid_model()
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", prefix="yolo_ros_tracker_", suffix=".yaml", delete=False
+            ) as tmp:
+                yaml.safe_dump(tracker_cfg, tmp, sort_keys=False)
+                self._tracker_runtime_config_path = tmp.name
+                self._tracker_runtime_config = tmp.name
+            return True
+        except Exception as error:
+            self.get_logger().error(f"Failed to prepare tracker config: {error}")
+            return False
+
     def _reset_tracking_state(self) -> None:
         predictor = getattr(getattr(self, "_predictor", None), "predictor", None)
         if predictor is not None and hasattr(predictor, "trackers"):
@@ -283,7 +388,12 @@ class YoloNode(LifecycleNode):
         next_weights_path = self.weights_path
         next_yoloe_prompts = self.yoloe_prompts
         next_fuse = self.fuse
+        next_tracker = self.tracker
+        next_tracker_with_reid = self.tracker_with_reid
+        next_tracker_reid_model = self.tracker_reid_model
+        next_tracker_reid_weights_path = self.tracker_reid_weights_path
         should_reload = False
+        tracker_runtime_dirty = False
 
         for param in params:
             if param.name in ("weight_file", "weights_path"):
@@ -370,15 +480,32 @@ class YoloNode(LifecycleNode):
                         successful=False,
                         reason="tracker cannot be changed while active; deactivate first",
                     )
-                value = str(param.value)
-                if value not in self._TRACKER_CHOICES:
+                next_tracker = str(param.value)
+                tracker_runtime_dirty = True
+            elif param.name == "tracker_with_reid":
+                if self._state_machine.current_state[1] == "active":
                     return SetParametersResult(
                         successful=False,
-                        reason=f"tracker must be one of {self._TRACKER_CHOICES}",
+                        reason="tracker_with_reid cannot be changed while active; deactivate first",
                     )
-                self.tracker = value
-                self._reset_tracking_state()
-                self.get_logger().info(f"Updated tracker: {self.tracker}")
+                next_tracker_with_reid = bool(param.value)
+                tracker_runtime_dirty = True
+            elif param.name == "tracker_reid_model":
+                if self._state_machine.current_state[1] == "active":
+                    return SetParametersResult(
+                        successful=False,
+                        reason="tracker_reid_model cannot be changed while active; deactivate first",
+                    )
+                next_tracker_reid_model = str(param.value).strip() or "auto"
+                tracker_runtime_dirty = True
+            elif param.name == "tracker_reid_weights_path":
+                if self._state_machine.current_state[1] == "active":
+                    return SetParametersResult(
+                        successful=False,
+                        reason="tracker_reid_weights_path cannot be changed while active; deactivate first",
+                    )
+                next_tracker_reid_weights_path = str(param.value).strip() or self.weights_path
+                tracker_runtime_dirty = True
             elif param.name == "image_reliability":
                 if self._state_machine.current_state[1] == "active":
                     return SetParametersResult(
@@ -394,6 +521,31 @@ class YoloNode(LifecycleNode):
                 self.image_reliability = value
                 self.image_qos_profile.reliability = self._RELIABILITY_MAP[value]
                 self.get_logger().info(f"Updated image_reliability: {self.image_reliability}")
+
+        if tracker_runtime_dirty:
+            tracker_valid, tracker_reason = self._validate_tracker_settings(
+                tracker=next_tracker,
+                tracker_with_reid=next_tracker_with_reid,
+                tracker_reid_model=next_tracker_reid_model,
+                tracker_reid_weights_path=next_tracker_reid_weights_path,
+            )
+            if not tracker_valid:
+                return SetParametersResult(successful=False, reason=tracker_reason)
+
+            self.tracker = next_tracker
+            self.tracker_with_reid = next_tracker_with_reid
+            self.tracker_reid_model = next_tracker_reid_model
+            self.tracker_reid_weights_path = next_tracker_reid_weights_path
+            if not self._prepare_tracker_runtime_config():
+                return SetParametersResult(successful=False, reason="Failed to prepare tracker config")
+            self._reset_tracking_state()
+            self.get_logger().info(f"Updated tracker: {self.tracker}")
+            self.get_logger().info(f"Updated tracker_with_reid: {self.tracker_with_reid}")
+            if self.tracker_with_reid:
+                self.get_logger().info(f"Updated tracker_reid_model: {self._resolve_tracker_reid_model()}")
+                self.get_logger().info(
+                    f"Updated tracker_reid_weights_path: {self.tracker_reid_weights_path}"
+                )
 
         if should_reload and self._predictor is not None:
             if not self.load_model(
@@ -443,6 +595,7 @@ class YoloNode(LifecycleNode):
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
         self._remove_param_cb()
         self._destroy_publishers()
+        self._remove_tracker_runtime_config()
         self._release_predictor()
         return super().on_cleanup(state)
 
@@ -450,6 +603,7 @@ class YoloNode(LifecycleNode):
         self._destroy_subscription()
         self._remove_param_cb()
         self._destroy_publishers()
+        self._remove_tracker_runtime_config()
         self._release_predictor()
         return super().on_shutdown(state)
 
@@ -467,7 +621,7 @@ class YoloNode(LifecycleNode):
                 iou=self.iou,
                 classes=classes,
                 device=self.device,
-                tracker=self.tracker,
+                tracker=self._tracker_runtime_config,
                 persist=True,
                 verbose=False
             )

@@ -1,2 +1,6 @@
 *.pt
 *.ts
+*.onnx
+*.engine
+*.torchscript
+*.openvino

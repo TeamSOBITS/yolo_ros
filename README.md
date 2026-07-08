@@ -11,196 +11,199 @@
 # YOLO ROS
 
 <details>
-  <summary>Table of Contents</summary>
+  <summary>目次</summary>
   <ol>
-    <li><a href="#overview">Overview</a></li>
+    <li><a href="#概要">概要</a></li>
     <li>
-      <a href="#setup">Setup</a>
+      <a href="#セットアップ">セットアップ</a>
       <ul>
-        <li><a href="#environment">Environment</a></li>
-        <li><a href="#installation">Installation</a></li>
+        <li><a href="#環境条件">環境条件</a></li>
+        <li><a href="#インストール方法">インストール方法</a></li>
       </ul>
     </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#parameters">Parameters</a></li>
-    <li><a href="#topics">Topics</a></li>
-    <li><a href="#demo">Demo</a></li>
-    <li><a href="#references">References</a></li>
+    <li><a href="#実行操作方法">実行・操作方法</a></li>
+    <li><a href="#パラメーター">パラメーター</a></li>
+    <li><a href="#トピック">トピック</a></li>
+    <li><a href="#デモ">デモ</a></li>
+    <li><a href="#参考文献">参考文献</a></li>
   </ol>
 </details>
 
-## Overview
-`yolo_ros` is a ROS 2 lifecycle wrapper for Ultralytics YOLO models, supporting YOLO26 (detection, pose, segmentation) and YOLOE (prompt-based detection and segmentation).
+## 概要
+`yolo_ros` は，Ultralytics YOLO モデル（YOLO26 系の検出・姿勢推定・セグメンテーション，および YOLOE）を ROS 2 で利用するためのライフサイクル対応ラッパーパッケージです．
 
-**Main Features:**
-- Object detection (`Detection2DArray`)
-- Human pose estimation (`KeyPointArray`)
-- Instance segmentation (`DetectMaskArray`)
-- YOLO tracking (BoT-SORT / ByteTrack with `track_id` in `Detection2DArray`)
-- Prompt-based detection and segmentation with YOLOE
-- Conv+BN layer fusion for faster inference (`fuse`)
-- Full ROS 2 lifecycle support (`configure` → `activate` → `deactivate` → `cleanup`)
-- All parameters configurable at runtime via `ros2 param set`
+**主な機能：**
+- 物体検出（`Detection2DArray`）
+- 人物姿勢推定（`KeyPointArray`）
+- インスタンスセグメンテーション（`DetectMaskArray`）
+- YOLO トラッキング（BoT-SORT / ByteTrack，`track_id` 付き `Detection2DArray`）
+- YOLOE によるプロンプトベースの検出・セグメンテーション
+- Conv+BN 層の融合による高速化（`fuse`）
+- ROS 2 ライフサイクル完全対応（`configure` → `activate` → `deactivate` → `cleanup`）
+- 全パラメーターを `ros2 param set` でランタイムに変更可能
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 
-## Setup
+## セットアップ
 
-### Environment
+### 環境条件
 
-| System | Version |
-| ------ | ------- |
-| Ubuntu | 24.04 (Noble Numbat) |
-| ROS 2  | Jazzy Jalisco |
-| Python | 3.12 |
+| システム | バージョン |
+| -------- | ---------- |
+| Ubuntu   | 24.04 (Noble Numbat) |
+| ROS 2    | Jazzy Jalisco |
+| Python   | 3.12 |
 
-### Installation
-1. Move to your ROS 2 `src` directory.
+### インストール方法
+1. ROS 2 の `src` フォルダに移動します．
    ```sh
    cd ~/colcon_ws/src/
    ```
-2. Clone this repository.
+2. 本レポジトリをクローンします．
    ```sh
    git clone https://github.com/TeamSOBITS/yolo_ros.git
    ```
-3. Navigate into the repository and install dependencies.
+3. レポジトリの中へ移動し，依存パッケージをインストールします．
    ```sh
    cd yolo_ros
    bash install.sh
    ```
-4. Build the package.
+4. パッケージをビルドします．
    ```sh
    cd ~/colcon_ws/
    colcon build --symlink-install
    source install/setup.bash
    ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 
-## Usage
+## 実行・操作方法
 
-### Start with launch-time configuration
+### 起動時に launch で設定して使う
 
-1. Start in detection mode:
+1. 物体検出モードで起動します：
    ```sh
    ros2 launch yolo_ros yolo.launch.py image_topic_name:=/camera/color/image_raw mode:=detect
    ```
 
-2. Start in tracking mode:
+2. トラッキングモードで起動します：
    ```sh
-   ros2 launch yolo_ros yolo.launch.py image_topic_name:=/camera/color/image_raw mode:=track tracker:=botsort.yaml
+   ros2 launch yolo_ros yolo.launch.py image_topic_name:=/camera/color/image_raw mode:=track
    ```
 
-   `tracker` can be `botsort.yaml` or `bytetrack.yaml`.
+   トラッカーは `botsort.yaml`，`bytetrack.yaml`，`ocsort.yaml`，`deepocsort.yaml`，`fasttrack.yaml`，`tracktrack.yaml` を指定できます．
 
-3. Auto configure and activate are `true` by default at launch time:
+3. 起動時に自動で configure・activate する既定値は `true` です：
    ```sh
    ros2 launch yolo_ros yolo.launch.py auto_configure_2d:=true auto_activate_2d:=true
    ```
 
-4. Enable 3D coordinate pipelines:
+4. 3D 座標変換パイプラインを有効にする場合：
    ```sh
    ros2 launch yolo_ros yolo.launch.py use_bbox_to_3d:=true use_keypoint_to_3d:=false use_mask_to_3d:=false
    ```
 
-### Switch after startup with lifecycle / param
+### 起動後に lifecycle / param で切り替えて使う
 
-1. Manage the lifecycle manually:
+1. ライフサイクルを手動で管理する場合：
    ```sh
    ros2 launch yolo_ros yolo.launch.py auto_configure_2d:=false auto_activate_2d:=false
    ros2 lifecycle set /yolo_node configure
    ros2 lifecycle set /yolo_node activate
    ```
 
-2. Switch models at runtime (`weight_file` and `tracker` require deactivate first):
+2. ランタイムにモデルを切り替える場合（`weight_file` や `tracker`，`tracker_with_reid`，`tracker_reid_model` は deactivate が必要）：
    ```sh
    ros2 lifecycle set /yolo_node deactivate
    ros2 param set /yolo_node weight_file yolo26n-pose.pt
    ros2 lifecycle set /yolo_node activate
    ```
 
-3. Switch to tracking mode:
+3. トラッキングモードへ切り替える場合：
    ```sh
    ros2 lifecycle set /yolo_node deactivate
    ros2 param set /yolo_node yolo_mode track
-   ros2 param set /yolo_node tracker botsort.yaml
+   ros2 param set /yolo_node tracker tracktrack.yaml
    ros2 lifecycle set /yolo_node activate
    ```
 
-4. Switch back to detection mode:
+4. 物体検出モードへ戻す場合：
    ```sh
    ros2 param set /yolo_node yolo_mode detect
    ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 
-## Parameters
+## パラメーター
 
-The following parameters can be set via the launch file or `ros2 param set` at runtime.
+以下のパラメーターはランチファイルまたは `ros2 param set` で設定できます．
 
-`mode:=detect|track` is the launch-time mode selector. `mode:=detect` uses `predict()` and `mode:=track` uses `track()`. Inside the node, the same meaning is exposed as the `yolo_mode` parameter, so you can switch with `ros2 param set /yolo_node yolo_mode track` or `detect`. `tracker` is the tracker selection used only in tracking mode, and can be `botsort.yaml` or `bytetrack.yaml`.
+`mode:=detect|track` は launch 引数です．`mode:=detect` は `predict()`，`mode:=track` は `track()` を使います．ノード本体では同じ意味を `yolo_mode` パラメーターで持ち，`ros2 param set /yolo_node yolo_mode track` / `detect` で切り替えます．一方，`tracker` は tracking モードで使うトラッカー種別の指定で，`botsort.yaml`，`bytetrack.yaml`，`ocsort.yaml`，`deepocsort.yaml`，`fasttrack.yaml`，`tracktrack.yaml` を選びます．BoT-SORT，Deep OC-SORT，TrackTrack では `tracker_with_reid` と `tracker_reid_model` で ReID を有効化できます．
 
-| Parameter              | Description                                                                                     | Default                        | Runtime update  |
-| ---------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------ | --------------- |
-| `weight_file`          | YOLO weight filename                                                                            | `yolo26n.pt`                   | inactive only   |
-| `weights_path`         | Directory containing the weight file                                                            | `<package>/weights`            | inactive only   |
-| `conf`                 | Detection confidence threshold (0.0, 1.0]                                                       | `0.5`                         | yes             |
-| `iou`                  | NMS IoU threshold (0.0, 1.0]                                                                    | `0.7`                          | yes             |
-| `yolo_mode`            | Node execution mode. `detect` uses `predict()` and `track` uses `track()`                      | `detect`                       | yes             |
-| `tracker`              | Ultralytics tracker config used in tracking mode (`botsort.yaml` or `bytetrack.yaml`)          | `botsort.yaml`                 | inactive only   |
-| `use_tracking`         | Legacy compatibility parameter. `true` maps to `track`, `false` maps to `detect`              | `false`                        | yes             |
-| `use_detection_filter` | Whether to use `filter_classes` provided from `config/detection_filters.yaml` or elsewhere     | `true`                         | yes             |
-| `filter_classes`       | Class names to keep for YOLO detection, visualization, and tracking (empty or only empty strings = all classes) | `['person', 'bottle']` | yes             |
-| `keypoint_name_list`   | Keypoint names for pose models (positional, max = model keypoint count)                         | `['']`                         | yes             |
-| `yoloe_prompts`        | Text prompts for YOLOE models (required when using YOLOE)                                       | `['']`                         | yes             |
-| `image_reliability`    | QoS reliability for the image subscription (`best_effort`, `reliable`, `system_default`, ...)  | `best_effort`                  | inactive only   |
-| `device`               | Inference device (`cuda`, `cpu`, `cuda:0`, ...)                                                 | `cuda` if available else `cpu` | inactive only   |
-| `fuse`                 | Fuse Conv+BN layers after load for faster inference                                             | `true`                         | inactive only   |
-| `auto_configure_2d`    | Configure the YOLO lifecycle node on startup                                                    | `true`                         | —               |
-| `auto_activate_2d`     | Activate the YOLO lifecycle node on startup                                                     | `true`                         | —               |
-| `auto_configure_3d`    | Configure the image_to_position lifecycle node on startup                                       | `false`                        | —               |
-| `auto_activate_3d`     | Activate the image_to_position lifecycle node on startup                                        | `false`                        | —               |
-| `use_bbox_to_3d`       | Launch the `bbox_to_3d` 3D detection pipeline                                                   | `false`                        | —               |
-| `use_keypoint_to_3d`   | Launch the `keypoint_to_3d` 3D pipeline                                                         | `false`                        | —               |
-| `use_mask_to_3d`       | Launch the `mask_to_3d` 3D pipeline                                                             | `false`                        | —               |
+| パラメーター名         | 説明                                                                                          | デフォルト値                        | ランタイム変更  |
+| ---------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------- | --------------- |
+| `weight_file`          | YOLO の重みファイル名                                                                         | `yolo26n.pt`                        | inactive 時のみ |
+| `weights_path`         | 重みファイルが格納されているディレクトリ                                                       | `<package>/weights`                 | inactive 時のみ |
+| `conf`                 | 検出の信頼度閾値（0.0, 1.0]                                                                   | `0.5`                              | 可              |
+| `iou`                  | NMS の IoU 閾値（0.0, 1.0]                                                                    | `0.7`                               | 可              |
+| `yolo_mode`            | ノード本体の実行モード。`detect` で `predict()`，`track` で `track()` を使う                  | `detect`                            | 可              |
+| `tracker`              | tracking モードで使う Ultralytics のトラッカー設定（`botsort.yaml`，`bytetrack.yaml`，`ocsort.yaml`，`deepocsort.yaml`，`fasttrack.yaml`，`tracktrack.yaml`） | `tracktrack.yaml` | inactive 時のみ |
+| `tracker_with_reid`    | BoT-SORT，Deep OC-SORT，TrackTrack で ReID を有効化するか                                      | `true`                              | inactive 時のみ |
+| `tracker_reid_model`   | ReID モデルのファイル名またはパス。`.onnx`，`.engine`，`.torchscript`，`.openvino`，`.pt` を指定可能 | `yolo26m-reid.onnx` | inactive 時のみ |
+| `tracker_reid_weights_path` | `tracker_reid_model` をファイル名だけで指定したときに参照するディレクトリ                 | `<package>/weights`                 | inactive 時のみ |
+| `use_tracking`         | 旧互換パラメーター。`true` で `track`，`false` で `detect` に対応                             | `false`                             | 可              |
+| `use_detection_filter` | `config/detection_filters.yaml` などから与えた `filter_classes` を使うか                      | `true`                              | 可              |
+| `filter_classes`       | YOLO の検出・描画・トラッキング対象を絞り込むクラス名のリスト（空または空文字のみ = 全クラス） | `['person', 'bottle']`              | 可              |
+| `keypoint_name_list`   | 姿勢推定時のキーポイント名リスト（位置順，モデルのキーポイント数以内）                         | `['']`                              | 可              |
+| `yoloe_prompts`        | YOLOE モデルで使用するテキストプロンプト（YOLOE 使用時は必須）                                | `['']`                              | 可              |
+| `image_reliability`    | 画像サブスクリプションの QoS 信頼性（`best_effort`，`reliable`，`system_default` など）        | `best_effort`                       | inactive 時のみ |
+| `device`               | 推論デバイス（`cuda`，`cpu`，`cuda:0` など）                                                  | CUDA 利用可能なら `cuda`，否は `cpu` | inactive 時のみ |
+| `fuse`                 | ロード後に Conv+BN 層を融合して推論を高速化するか                                              | `true`                              | inactive 時のみ |
+| `auto_configure_2d`    | 起動時に YOLO ライフサイクルノードを Configure するか                                         | `true`                              | —               |
+| `auto_activate_2d`     | 起動時に YOLO ライフサイクルノードを Activate するか                                          | `true`                              | —               |
+| `auto_configure_3d`    | 起動時に image_to_position ライフサイクルノードを Configure するか                            | `false`                             | —               |
+| `auto_activate_3d`     | 起動時に image_to_position ライフサイクルノードを Activate するか                             | `false`                             | —               |
+| `use_bbox_to_3d`       | `bbox_to_3d` の3D検出パイプラインを起動するか                                                 | `false`                             | —               |
+| `use_keypoint_to_3d`   | `keypoint_to_3d` の3Dパイプラインを起動するか                                                 | `false`                             | —               |
+| `use_mask_to_3d`       | `mask_to_3d` の3Dパイプラインを起動するか                                                     | `false`                             | —               |
 
-> **Note:** `weight_file`, `weights_path`, `device`, `fuse`, `image_reliability`, and `tracker` require the node to be `inactive` (deactivated) before changing.
+> **注意：** `weight_file`，`weights_path`，`device`，`fuse`，`image_reliability`，`tracker`，`tracker_with_reid`，`tracker_reid_model`，`tracker_reid_weights_path` は，ノードが `inactive`（deactivate 済み）状態のときのみ変更できます．
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-## Topics
-
-### Publications
-
-| Topic                     | Type                                  | Description                          |
-| ------------------------- | ------------------------------------- | ------------------------------------ |
-| `<node>/detected_image`   | `sensor_msgs/Image`                   | Annotated visualization image        |
-| `<node>/object_boxes`     | `vision_msgs/Detection2DArray`        | Bounding boxes per detected instance |
-| `<node>/object_keypoints` | `sobits_interfaces/KeyPointArray`     | Keypoints (pose models only)         |
-| `<node>/object_masks`     | `sobits_interfaces/DetectMaskArray`   | Instance masks (segmentation models) |
-
-### Subscriptions
-
-| Topic                | Type                    | Description        |
-| -------------------- | ----------------------- | ------------------ |
-| `<image_topic_name>` | `sensor_msgs/Image`     | Input camera image |
-
-> `<node>` defaults to `yolo_node`. Override with the `node_name` launch argument. When tracking is enabled, `Detection2D.id` and `DetectMask.instance_id` contain `class_name:track_id`, such as `person:1`. The class name is also kept in `Detection2D.results[].hypothesis.class_id`.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 
-## Demo
+## トピック
 
-| Object Detection | Pose Estimation | Segmentation |
+### 配信（Publications）
+
+| トピック名                  | 型                                    | 説明                                       |
+| --------------------------- | ------------------------------------- | ------------------------------------------ |
+| `<node>/detected_image`     | `sensor_msgs/Image`                   | アノテーション付き可視化画像               |
+| `<node>/object_boxes`       | `vision_msgs/Detection2DArray`        | 検出インスタンスごとのバウンディングボックス |
+| `<node>/object_keypoints`   | `sobits_interfaces/KeyPointArray`     | キーポイント（姿勢推定モデル使用時）        |
+| `<node>/object_masks`       | `sobits_interfaces/DetectMaskArray`   | インスタンスマスク（セグメンテーションモデル使用時） |
+
+### 購読（Subscriptions）
+
+| トピック名             | 型                      | 説明               |
+| ---------------------- | ----------------------- | ------------------ |
+| `<image_topic_name>`   | `sensor_msgs/Image`     | 入力カメラ画像     |
+
+> `<node>` のデフォルトは `yolo_node` です．ランチ引数 `node_name` で変更できます．トラッキング有効時，`Detection2D.id` と `DetectMask.instance_id` には `person:1` のように `クラス名:track_id` が入ります．クラス名自体は `Detection2D.results[].hypothesis.class_id` にも保持されます．
+
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
+
+
+## デモ
+
+| 物体検出 | 姿勢推定 | セグメンテーション |
 |:---:|:---:|:---:|
 | ![](docs/yolo26n.jpg) | ![](docs/yolo26n-pose.jpg) | ![](docs/yoloe-26n-seg.jpg) |
 
-### Detection
+### 物体検出
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node weight_file yolo26n.pt
@@ -208,7 +211,7 @@ ros2 param set /yolo_node filter_classes "['person', 'laptop']"
 ros2 lifecycle set /yolo_node activate
 ```
 
-### Pose Estimation
+### 姿勢推定
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node weight_file yolo26n-pose.pt
@@ -216,14 +219,14 @@ ros2 param set /yolo_node keypoint_name_list "['nose', 'left_eye', 'right_eye']"
 ros2 lifecycle set /yolo_node activate
 ```
 
-### Segmentation
+### セグメンテーション
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node weight_file yolo26n-seg.pt
 ros2 lifecycle set /yolo_node activate
 ```
 
-### YOLOE Segmentation
+### YOLOE セグメンテーション
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node weight_file yoloe-26n-seg.pt
@@ -231,18 +234,23 @@ ros2 param set /yolo_node yoloe_prompts "['bottle', 'laptop']"
 ros2 lifecycle set /yolo_node activate
 ```
 
-### YOLO Tracking
-Start directly in tracking mode:
+### YOLO トラッキング
+起動時に tracking モードで始める場合：
 ```bash
-ros2 launch yolo_ros yolo.launch.py mode:=track tracker:=botsort.yaml
+ros2 launch yolo_ros yolo.launch.py mode:=track
 ```
 
-To use ByteTrack:
+ByteTrack を使う場合：
 ```bash
 ros2 launch yolo_ros yolo.launch.py mode:=track tracker:=bytetrack.yaml
 ```
 
-To switch into tracking mode after startup:
+TrackTrack + ReID を使う場合：
+```bash
+ros2 launch yolo_ros yolo.launch.py mode:=track tracker:=tracktrack.yaml tracker_with_reid:=true
+```
+
+起動後に tracking モードへ切り替える場合：
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node yolo_mode track
@@ -250,50 +258,71 @@ ros2 param set /yolo_node tracker botsort.yaml
 ros2 lifecycle set /yolo_node activate
 ```
 
-To track only people:
+人物だけを対象にする場合：
 ```bash
 ros2 param set /yolo_node filter_classes "['person']"
 ```
 
-To track multiple classes:
-```bash
-ros2 param set /yolo_node filter_classes "['person', 'car']"
-```
-
-To temporarily return to all classes:
+一時的に全クラスを対象に戻す場合：
 ```bash
 ros2 param set /yolo_node use_detection_filter false
 ```
 
-`filter_classes` can be kept in `config/detection_filters.yaml`. When `use_detection_filter:=true`, class names are resolved through the model `names` and passed to `predict()` / `track()` as the YOLO `classes` argument. When `use_detection_filter:=false`, `filter_classes` is ignored and all model classes are used.
+`filter_classes` は `config/detection_filters.yaml` にまとめて設定できます．`use_detection_filter:=true` のとき，指定したクラス名はモデルの `names` からクラス ID に変換され，YOLO の `classes` 引数として `predict()` / `track()` に渡されます．`use_detection_filter:=false` のときは `filter_classes` を無視して全クラスを対象にします．
 
-The `track_id` stored in `Detection2D.id` and `DetectMask.instance_id` is a short-term tracking ID while the same object remains continuously visible. The same physical object may receive a new `track_id` after deactivate / activate, changing `tracker`, changing `filter_classes`, changing `use_detection_filter`, or disappearing from view long enough to be reacquired later. YOLO tracking is not a re-identification system, so persistent identity across those events is not guaranteed.
+`Detection2D.id` と `DetectMask.instance_id` の `track_id` は，同じ物体が短時間連続して見えているあいだの追跡用 ID です．ノードの deactivate / activate，`tracker` の変更，`filter_classes` の変更，`use_detection_filter` の変更，物体が長く画角外へ出たあとの再登場などでは，同じ物体でも `track_id` が再割り当てされることがあります．YOLO tracking は再識別機能ではないため，`track_id` の永続的な固定は保証しません．
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+#### トラッキングの種類
+
+| トラッカー | 特徴 |
+| ---------- | ---- |
+| `botsort.yaml` | デフォルトの追跡方式です．ByteTrack 系をベースに，カメラ移動補償や外観特徴の再対応付けを扱いやすくした方式です．移動カメラや ID スイッチを抑えたい場面に向いています． |
+| `bytetrack.yaml` | 低信頼度の検出も後段で救済しながら追跡する，軽量で高速なベースラインです．まず最初に試しやすい方式です． |
+| `ocsort.yaml` | 観測結果を重視して，遮蔽や急な動きでたまる予測ずれを補正しやすくした方式です．急旋回や不規則な動きに比較的強いです． |
+| `deepocsort.yaml` | OC-SORT に外観特徴ベースの対応付けを加えた方式です．混雑シーンや再出現時の ID 維持を重視したい場合に向いています． |
+| `fasttrack.yaml` | ByteTrack 系の軽さを保ちつつ，部分遮蔽に強くするための補正を入れた高速寄りの方式です． |
+| `tracktrack.yaml` | 複数の手がかりを組み合わせて対応付けを行う方式です．混雑や移動カメラ環境で，より粘り強く ID を維持したい場合の候補です． |
+
+これらの tracker YAML は，このパッケージの `config/` からではなく，`pip install ultralytics` で入る Ultralytics パッケージ側の built-in 設定を使っています．この `yolo_ros` パッケージでは `tracker:=bytetrack.yaml` のようにファイル名だけを渡し，Ultralytics 側がインストール済みの tracker YAML を探して読み込みます．
+
+BoT-SORT，Deep OC-SORT，TrackTrack で ReID を使う場合は，検出モデルの `.pt` と同じように ReID モデルファイルも `weights/` に置いて管理できます．既定では `tracker_with_reid:=true`，`tracker_reid_model:=yolo26m-reid.onnx` なので，`<package>/weights/yolo26m-reid.onnx` を参照します．別の ReID モデルを使いたいときは，`.onnx`，`.engine`，`.torchscript`，`.openvino`，`.pt` を `tracker_reid_model` で指定し，必要に応じて `tracker_reid_weights_path` かフルパス指定で切り替えられます．
+
+たとえばこの環境では，`bytetrack.yaml` は次の場所にあります．
+
+```text
+/home/kurokara/.local/lib/python3.12/site-packages/ultralytics/cfg/trackers/bytetrack.yaml
+```
+
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 
-## Model Downloads
+## モデルのダウンロード
 
-Download the `.pt` file for your task and place it in the [weights](./weights/) directory:
+使用するタスクの `.pt` ファイルをダウンロードし，[weights](./weights/) ディレクトリに配置してください．ReID を使う場合は，`.onnx`，`.engine`，`.torchscript`，`.openvino`，`.pt` の ReID モデルファイルも同じ `weights/` に配置します．`yolo26m-reid.onnx` などの ONNX モデルは <https://github.com/ultralytics/assets/releases/tag/v8.4.0> の Assets から探して配置してください：
 
-| Task | Model page |
-| ---- | ---------- |
-| Detection | [YOLO26 Detection Models](https://docs.ultralytics.com/tasks/detect#models) |
-| Segmentation | [YOLO26 Segmentation Models](https://docs.ultralytics.com/tasks/segment#models) |
-| Semantic Segmentation | [YOLO26 Semantic Models](https://docs.ultralytics.com/tasks/semantic#models) |
-| Pose Estimation | [YOLO26 Pose Models](https://docs.ultralytics.com/tasks/pose#models) |
-| YOLOE (open-vocabulary) | [YOLOE-26 Models](https://docs.ultralytics.com/models/yolo26#yoloe-26-open-vocabulary-instance-segmentation) |
+```
+yolo_ros/weights/<モデル名>.pt
+yolo_ros/weights/<reidモデル名>.onnx
+```
 
-Then set the filename via the `weight_file` launch argument or at runtime:
+| タスク | モデルページ |
+| ------ | ------------ |
+| 物体検出 | [YOLO26 Detection Models](https://docs.ultralytics.com/tasks/detect#models) |
+| セグメンテーション | [YOLO26 Segmentation Models](https://docs.ultralytics.com/tasks/segment#models) |
+| セマンティックセグメンテーション | [YOLO26 Semantic Models](https://docs.ultralytics.com/tasks/semantic#models) |
+| 姿勢推定 | [YOLO26 Pose Models](https://docs.ultralytics.com/tasks/pose#models) |
+| YOLOE（オープン語彙） | [YOLOE-26 Models](https://docs.ultralytics.com/models/yolo26#yoloe-26-open-vocabulary-instance-segmentation) |
+
+配置後，`weight_file` ランチ引数またはランタイムで指定します：
 ```sh
 ros2 param set /yolo_node weight_file yolo26n.pt
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 
 
-## References
-* [Ultralytics Documentation](https://docs.ultralytics.com/)
+## 参考文献
+* [Ultralytics ドキュメント](https://docs.ultralytics.com/ja/)
 
 [contributors-shield]: https://img.shields.io/github/contributors/TeamSOBITS/yolo_ros.svg?style=for-the-badge
 [contributors-url]: https://github.com/TeamSOBITS/yolo_ros/graphs/contributors

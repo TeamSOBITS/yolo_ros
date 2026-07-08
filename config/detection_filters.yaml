@@ -3,4 +3,4 @@
   ros__parameters:
     filter_classes:
       - "person"
-      - "bottle"
+      # - "bottle"
