@@ -155,7 +155,11 @@
 | `use_tracking`         | 旧互換パラメーター。`true` で `track`，`false` で `detect` に対応                             | `false`                             | 可              |
 | `use_detection_filter` | `config/detection_filters.yaml` などから与えた `filter_classes` を使うか                      | `true`                              | 可              |
 | `filter_classes`       | YOLO の検出・描画・トラッキング対象を絞り込むクラス名のリスト（空または空文字のみ = 全クラス） | `['person', 'bottle']`              | 可              |
-| `keypoint_name_list`   | 姿勢推定時のキーポイント名リスト（位置順，モデルのキーポイント数以内）                         | `['']`                              | 可              |
+| `keypoint_publish_names` | 姿勢推定で publish するキーポイント名のリスト                                               | `['nose', 'left_wrist']`            | 可              |
+| `person_keypoint_filter_names` | person として残すために必要なキーポイント名のリスト                                 | `['nose']`                          | 可              |
+| `keypoint_trail_names` | 姿勢推定トラッキングで導線を描くキーポイント名のリスト                                       | `['left_wrist']`                    | 可              |
+| `use_person_keypoint_filter` | `person_keypoint_filter_names` を pose の person 判定に使うか                          | `false`                             | 可              |
+| `trail_mode`          | 導線モード。`false`，`bbox`，`keypoint`，`all` を選択                                         | `bbox`                              | 可              |
 | `yoloe_prompts`        | YOLOE モデルで使用するテキストプロンプト（YOLOE 使用時は必須）                                | `['']`                              | 可              |
 | `image_reliability`    | 画像サブスクリプションの QoS 信頼性（`best_effort`，`reliable`，`system_default` など）        | `best_effort`                       | inactive 時のみ |
 | `device`               | 推論デバイス（`cuda`，`cpu`，`cuda:0` など）                                                  | CUDA 利用可能なら `cuda`，否は `cpu` | inactive 時のみ |
@@ -213,9 +217,19 @@ ros2 lifecycle set /yolo_node activate
 ```bash
 ros2 lifecycle set /yolo_node deactivate
 ros2 param set /yolo_node weight_file yolo26n-pose.pt
-ros2 param set /yolo_node keypoint_name_list "['nose', 'left_eye', 'right_eye']"
+ros2 param set /yolo_node keypoint_publish_names "['nose', 'left_eye', 'right_eye']"
 ros2 lifecycle set /yolo_node activate
 ```
+
+#### キーポイント設定
+
+| 項目 | 役割 |
+|------|------|
+| `keypoint_publish_names` | `/object_keypoints` に publish する点 |
+| `person_keypoint_filter_names` | `use_person_keypoint_filter:=true` のときに，person として残すために必要な点 |
+| `keypoint_trail_names` | `trail_mode:=keypoint` または `trail_mode:=all` のときに導線を描く点 |
+
+`person_keypoint_filter_names` は，書いた点がすべて見えている detection だけを person として残します．空配列 `[]` ならフィルタしません．
 
 ### セグメンテーション
 ```bash
@@ -281,7 +295,8 @@ ros2 param set /yolo_node use_detection_filter false
 | `fasttrack.yaml` | ByteTrack 系の軽さを保ちつつ，部分遮蔽に強くするための補正を入れた高速寄りの方式です． |
 | `tracktrack.yaml` | 複数の手がかりを組み合わせて対応付けを行う方式です．混雑や移動カメラ環境で，より粘り強く ID を維持したい場合の候補です． |
 
-`mode:=detect|track` で検出と追跡を切り替えます．`track` のときだけ `tracker` が使われ，`botsort.yaml`，`bytetrack.yaml`，`ocsort.yaml`，`deepocsort.yaml`，`fasttrack.yaml`，`tracktrack.yaml` を選べます．BoT-SORT，Deep OC-SORT，TrackTrack では `tracker_with_reid` と `tracker_reid_model` で ReID も使えます．
+`mode:=detect|track` で検出と追跡を切り替えます．
+BoT-SORT，Deep OC-SORT，TrackTrack では `tracker_with_reid` と `tracker_reid_model` で ReID も使えます．
 
 これらの tracker YAML は `yolo_ros` の `config/` ではなく，Ultralytics 側の built-in 設定を使っています．`tracker:=bytetrack.yaml` のように名前だけを渡すと，Ultralytics がインストール済みの YAML を探して読み込みます．
 
@@ -295,13 +310,13 @@ BoT-SORT，Deep OC-SORT，TrackTrack で ReID を使う場合は，ReID モデ�
 
 #### 導線
 
-`draw_trails:=true` で，`track_id` ごとの移動軌跡を描画します．
+`trail_mode:=bbox` で bbox 中心の導線，`trail_mode:=keypoint` でキーポイント導線，`trail_mode:=all` で両方を描画します．
 
 ```bash
-ros2 launch yolo_ros yolo.launch.py mode:=track draw_trails:=true
+ros2 launch yolo_ros yolo.launch.py mode:=track trail_mode:=all
 ```
 
-導線は tracking 専用です．不要なら `draw_trails:=false` で無効化できます．
+導線は tracking 専用です．不要なら `trail_mode:=false` で無効化できます．
 
 <p align="right">(<a href="#readme-top">上に戻る</a>)</p>
 

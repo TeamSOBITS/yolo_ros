@@ -11,6 +11,7 @@ import yaml
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, LifecycleState
 from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSDurabilityPolicy, QoSReliabilityPolicy
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.exceptions import ParameterUninitializedException
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import Image
@@ -24,6 +25,26 @@ from ultralytics.utils.checks import check_yaml
 class YoloNode(LifecycleNode):
 
     _MODE_CHOICES = ("detect", "track")
+    _TRAIL_MODE_CHOICES = ("false", "bbox", "keypoint", "all")
+    _POSE_KEYPOINT_NAMES_17 = (
+        "nose",
+        "left_eye",
+        "right_eye",
+        "left_ear",
+        "right_ear",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
+    )
     _TRACKER_CHOICES = (
         "botsort.yaml",
         "bytetrack.yaml",
@@ -58,16 +79,16 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("tracker_with_reid", True)
         self.declare_parameter("tracker_reid_model", "yolo26m-reid.onnx")
         self.declare_parameter("tracker_reid_weights_path", "")
-        self.declare_parameter("draw_trails", True)
+        self.declare_parameter("trail_mode", "bbox")
         self.declare_parameter("trail_length", 30)
         self.declare_parameter("line_width", 2)
         self.declare_parameter("use_detection_filter", True)
-        self.declare_parameter("use_keypoint_filter", True)
+        self.declare_parameter("use_person_keypoint_filter", False)
 
         self.declare_parameter("filter_classes", [""])
-        self.declare_parameter("keypoint_name_list", [""])
-        self.declare_parameter("keypoint_filter_names", [""])
-        self.declare_parameter("keypoint_conf_threshold", 0.4)
+        self.declare_parameter("keypoint_publish_names", [""])
+        self.declare_parameter("person_keypoint_filter_names", [""])
+        self.declare_parameter("keypoint_trail_names", [""])
         self.declare_parameter("yoloe_prompts", [""])
         self.declare_parameter("image_reliability", "best_effort")
         self.declare_parameter("device", "cuda" if torch.cuda.is_available() else "cpu")
@@ -94,21 +115,22 @@ class YoloNode(LifecycleNode):
         self.tracker_reid_weights_path = ""
         self._tracker_runtime_config = "tracktrack.yaml"
         self._tracker_runtime_config_path = None
-        self.draw_trails = True
+        self.trail_mode = "bbox"
         self.trail_length = 30
         self.line_width = 2
         self.use_detection_filter = True
-        self.use_keypoint_filter = True
+        self.use_person_keypoint_filter = False
         self.filter_classes = [""]
-        self.keypoint_name_list = [""]
-        self.keypoint_filter_names = [""]
-        self.keypoint_conf_threshold = 0.4
+        self.keypoint_publish_names = [""]
+        self.person_keypoint_filter_names = [""]
+        self.keypoint_trail_names = [""]
         self.yoloe_prompts = [""]
         self.image_reliability = "best_effort"
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.fuse = True
         self.image_qos_profile = None
         self.track_history = defaultdict(list)
+        self.keypoint_trail_history = defaultdict(list)
 
         self._param_cb = self.add_on_set_parameters_callback(self.parameters_callback)
         self._param_cb_registered = True
@@ -132,17 +154,17 @@ class YoloNode(LifecycleNode):
         self.tracker_reid_weights_path = (
             self.get_parameter("tracker_reid_weights_path").get_parameter_value().string_value
         ) or self.weights_path
-        self.draw_trails = self.get_parameter("draw_trails").get_parameter_value().bool_value
+        self.trail_mode = self.get_parameter("trail_mode").get_parameter_value().string_value
         self.trail_length = self.get_parameter("trail_length").get_parameter_value().integer_value
         self.line_width = self.get_parameter("line_width").get_parameter_value().integer_value
         self.use_detection_filter = self.get_parameter("use_detection_filter").get_parameter_value().bool_value
-        self.use_keypoint_filter = self.get_parameter("use_keypoint_filter").get_parameter_value().bool_value
+        self.use_person_keypoint_filter = self.get_parameter("use_person_keypoint_filter").get_parameter_value().bool_value
 
-        self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
-        self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
-        self.keypoint_filter_names = self.get_parameter("keypoint_filter_names").get_parameter_value().string_array_value
-        self.keypoint_conf_threshold = self.get_parameter("keypoint_conf_threshold").get_parameter_value().double_value
-        self.yoloe_prompts = self.get_parameter("yoloe_prompts").get_parameter_value().string_array_value
+        self.filter_classes = self._get_string_array_parameter("filter_classes")
+        self.keypoint_publish_names = self._get_string_array_parameter("keypoint_publish_names")
+        self.person_keypoint_filter_names = self._get_string_array_parameter("person_keypoint_filter_names")
+        self.keypoint_trail_names = self._get_string_array_parameter("keypoint_trail_names")
+        self.yoloe_prompts = self._get_string_array_parameter("yoloe_prompts")
         self.image_reliability = self.get_parameter("image_reliability").get_parameter_value().string_value
         self.device = self.get_parameter("device").get_parameter_value().string_value
         self.fuse = self.get_parameter("fuse").get_parameter_value().bool_value
@@ -168,9 +190,9 @@ class YoloNode(LifecycleNode):
         if self.line_width <= 0:
             self.get_logger().error(f"line_width must be > 0, got {self.line_width}")
             return TransitionCallbackReturn.FAILURE
-        if not 0.0 < self.keypoint_conf_threshold <= 1.0:
+        if self.trail_mode not in self._TRAIL_MODE_CHOICES:
             self.get_logger().error(
-                f"keypoint_conf_threshold must be in (0.0, 1.0], got {self.keypoint_conf_threshold}"
+                f"trail_mode must be one of {self._TRAIL_MODE_CHOICES}, got '{self.trail_mode}'"
             )
             return TransitionCallbackReturn.FAILURE
         if self.image_reliability not in self._RELIABILITY_MAP:
@@ -191,15 +213,15 @@ class YoloNode(LifecycleNode):
         if self.tracker_with_reid:
             self.get_logger().info(f"Tracker ReID model: {self._resolve_tracker_reid_model()}")
             self.get_logger().info(f"Tracker ReID weights path: {self.tracker_reid_weights_path}")
-        self.get_logger().info(f"Draw trails: {self.draw_trails}")
+        self.get_logger().info(f"Trail mode: {self.trail_mode}")
         self.get_logger().info(f"Trail length: {self.trail_length}")
         self.get_logger().info(f"Line width: {self.line_width}")
         self.get_logger().info(f"Use detection filter: {self.use_detection_filter}")
-        self.get_logger().info(f"Use keypoint filter: {self.use_keypoint_filter}")
+        self.get_logger().info(f"Use person keypoint filter: {self.use_person_keypoint_filter}")
         self.get_logger().info(f"Filter classes: {self.filter_classes}")
-        self.get_logger().info(f"Keypoint name list: {self.keypoint_name_list}")
-        self.get_logger().info(f"Keypoint filter names: {self.keypoint_filter_names}")
-        self.get_logger().info(f"Keypoint conf threshold: {self.keypoint_conf_threshold}")
+        self.get_logger().info(f"Keypoint publish names: {self.keypoint_publish_names}")
+        self.get_logger().info(f"Person keypoint filter names: {self.person_keypoint_filter_names}")
+        self.get_logger().info(f"Keypoint trail names: {self.keypoint_trail_names}")
         self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
         self.get_logger().info(f"Image reliability: {self.image_reliability}")
         self.get_logger().info(f"Device: {self.device}")
@@ -211,12 +233,12 @@ class YoloNode(LifecycleNode):
             return TransitionCallbackReturn.FAILURE
 
         self._validate_keypoint_name_list()
-        keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+        keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_settings()
         if not keypoint_filter_valid:
             self.get_logger().error(keypoint_filter_reason)
             return TransitionCallbackReturn.FAILURE
         self._warn_filter_classes_ignored()
-        self._warn_keypoint_filter_ignored()
+        self._warn_keypoint_settings_ignored()
         self._log_filter_class_ids()
 
         self.image_qos_profile = QoSProfile(
@@ -245,6 +267,12 @@ class YoloNode(LifecycleNode):
                 "filter_classes is set but this is a YOLOE model — "
                 "use yoloe_prompts to filter classes; filter_classes will be ignored"
             )
+
+    def _get_string_array_parameter(self, name):
+        try:
+            return list(self.get_parameter(name).get_parameter_value().string_array_value)
+        except ParameterUninitializedException:
+            return []
 
     def _model_names(self):
         if self._predictor is None:
@@ -285,79 +313,134 @@ class YoloNode(LifecycleNode):
         if class_ids is not None:
             self.get_logger().info(f"Filter class IDs: {class_ids}")
 
+    def _model_keypoint_names(self):
+        kpt_shape = getattr(self._predictor, "kpt_shape", None)
+        if kpt_shape is None:
+            return []
+        if kpt_shape[0] == len(self._POSE_KEYPOINT_NAMES_17):
+            return list(self._POSE_KEYPOINT_NAMES_17)
+        return []
+
+    @staticmethod
+    def _active_keypoint_names(names):
+        return [name for name in names if name]
+
+    def _publish_keypoint_names(self):
+        return self._active_keypoint_names(self.keypoint_publish_names)
+
+    def _person_keypoint_filter_names(self):
+        if not self.use_person_keypoint_filter:
+            return []
+        return self._active_keypoint_names(self.person_keypoint_filter_names)
+
+    def _draw_bbox_trails_enabled(self):
+        return self.trail_mode in ("bbox", "all")
+
+    def _draw_keypoint_trails_enabled(self):
+        return self.trail_mode in ("keypoint", "all")
+
+    def _trail_keypoint_names(self):
+        if not self._draw_keypoint_trails_enabled():
+            return []
+        return self._active_keypoint_names(self.keypoint_trail_names)
+
+    def _validate_keypoint_names(self, param_name, names) -> None:
+        kpt_shape = getattr(self._predictor, "kpt_shape", None)
+        if kpt_shape is None:
+            return
+
+        active = self._active_keypoint_names(names)
+        if not active:
+            return
+
+        model_keypoint_names = self._model_keypoint_names()
+        if not model_keypoint_names:
+            self.get_logger().warn(
+                f"Pose model detected ({kpt_shape[0]} keypoints) but no built-in keypoint name mapping is available"
+            )
+            return
+
+        unknown = [name for name in active if name not in model_keypoint_names]
+        if unknown:
+            self.get_logger().warn(f"{param_name} contains unknown names: {unknown}")
+
     def _validate_keypoint_name_list(self) -> None:
         kpt_shape = getattr(self._predictor, "kpt_shape", None)
-        if kpt_shape is not None:
-            self.keypoint_name_list = [n for n in self.keypoint_name_list if n]
-            if not self.keypoint_name_list:
-                self.get_logger().warn(
-                    f"Pose model detected ({kpt_shape[0]} keypoints) but keypoint_name_list is empty — "
-                    "no keypoints will be published"
-                )
+        if kpt_shape is None:
+            return
 
-    def _active_keypoint_filter_names(self):
-        if not self.use_keypoint_filter:
-            return []
-        return [name for name in self.keypoint_filter_names if name]
+        if not self._publish_keypoint_names():
+            self.get_logger().warn(
+                f"Pose model detected ({kpt_shape[0]} keypoints) but keypoint_publish_names is empty — "
+                "no keypoints will be published"
+            )
 
-    def _validate_keypoint_filter_settings(self):
-        if not 0.0 < self.keypoint_conf_threshold <= 1.0:
-            return False, "keypoint_conf_threshold must be in (0.0, 1.0]"
+        self._validate_keypoint_names("keypoint_publish_names", self.keypoint_publish_names)
+        self._validate_keypoint_names("person_keypoint_filter_names", self.person_keypoint_filter_names)
+        self._validate_keypoint_names("keypoint_trail_names", self.keypoint_trail_names)
 
-        active = self._active_keypoint_filter_names()
-        if not active:
+    def _validate_keypoint_settings(self):
+        filter_names = self._person_keypoint_filter_names()
+        trail_names = self._trail_keypoint_names()
+        if not filter_names and not trail_names:
             return True, ""
 
         kpt_shape = getattr(self._predictor, "kpt_shape", None)
         if kpt_shape is None:
-            return False, "keypoint_filter_names requires a pose model with keypoints"
+            if filter_names:
+                return False, "person keypoint filtering requires a pose model with keypoints"
+            if trail_names:
+                return False, "keypoint trails require a pose model with keypoints"
+            return True, ""
 
-        if len(self.keypoint_name_list) < kpt_shape[0]:
-            return False, (
-                f"keypoint_name_list must contain at least {kpt_shape[0]} names to use keypoint filtering"
-            )
+        model_keypoint_names = self._model_keypoint_names()
+        if not model_keypoint_names:
+            return False, f"No built-in keypoint name mapping is available for pose model with {kpt_shape[0]} keypoints"
 
-        missing = [name for name in active if name not in self.keypoint_name_list]
-        if missing:
-            return False, f"keypoint_filter_names contains unknown names: {missing}"
+        for param_name, names in (
+            ("keypoint_publish_names", self._publish_keypoint_names()),
+            ("person_keypoint_filter_names", filter_names),
+            ("keypoint_trail_names", trail_names),
+        ):
+            missing = [name for name in names if name not in model_keypoint_names]
+            if missing:
+                return False, f"{param_name} contains unknown names: {missing}"
         return True, ""
 
-    def _warn_keypoint_filter_ignored(self) -> None:
-        if not self.use_keypoint_filter:
+    def _warn_keypoint_settings_ignored(self) -> None:
+        if getattr(self._predictor, "kpt_shape", None) is not None:
             return
-        active = self._active_keypoint_filter_names()
-        if active and getattr(self._predictor, "kpt_shape", None) is None:
+        if self._person_keypoint_filter_names():
             self.get_logger().warn(
-                "use_keypoint_filter is true but this model has no keypoints — keypoint filtering will be ignored"
+                "use_person_keypoint_filter is true but this model has no keypoints — person keypoint filtering will be ignored"
+            )
+        if self._trail_keypoint_names():
+            self.get_logger().warn(
+                "trail_mode requests keypoint trails but this model has no keypoints — keypoint trails will be ignored"
             )
 
+    def _is_keypoint_visible(self, result, det_idx, kp_idx) -> bool:
+        conf = result.keypoints.conf
+        if conf is not None:
+            kp_conf = float(self._extract_scalar_value(conf[det_idx][kp_idx]))
+            return kp_conf >= self.conf
+
+        point = result.keypoints.xy[det_idx][kp_idx]
+        x = float(self._extract_scalar_value(point[0]))
+        y = float(self._extract_scalar_value(point[1]))
+        return not (x <= 0.0 and y <= 0.0)
+
     def _keypoint_filter_indices(self, result):
-        active = self._active_keypoint_filter_names()
+        active = self._person_keypoint_filter_names()
         if not active or result.keypoints is None or result.boxes is None:
             return None
 
-        name_to_idx = {name: idx for idx, name in enumerate(self.keypoint_name_list)}
+        name_to_idx = {name: idx for idx, name in enumerate(self._model_keypoint_names())}
         target_indices = [name_to_idx[name] for name in active]
-        conf = result.keypoints.conf
-        xy = result.keypoints.xy
         keep_indices = []
 
         for det_idx in range(len(result.boxes)):
-            visible = True
-            for kp_idx in target_indices:
-                if conf is not None:
-                    kp_conf = float(self._extract_scalar_value(conf[det_idx][kp_idx]))
-                    if kp_conf < self.keypoint_conf_threshold:
-                        visible = False
-                        break
-                else:
-                    point = xy[det_idx][kp_idx]
-                    x = float(self._extract_scalar_value(point[0]))
-                    y = float(self._extract_scalar_value(point[1]))
-                    if x <= 0.0 and y <= 0.0:
-                        visible = False
-                        break
-            if visible:
+            if all(self._is_keypoint_visible(result, det_idx, kp_idx) for kp_idx in target_indices):
                 keep_indices.append(det_idx)
 
         return keep_indices
@@ -446,6 +529,7 @@ class YoloNode(LifecycleNode):
 
     def _reset_tracking_state(self) -> None:
         self.track_history.clear()
+        self.keypoint_trail_history.clear()
         predictor = getattr(getattr(self, "_predictor", None), "predictor", None)
         if predictor is not None and hasattr(predictor, "trackers"):
             delattr(predictor, "trackers")
@@ -562,34 +646,33 @@ class YoloNode(LifecycleNode):
                 self.get_logger().info(
                     f"Updated use_detection_filter: {self.use_detection_filter}"
                 )
-            elif param.name == "use_keypoint_filter":
-                self.use_keypoint_filter = bool(param.value)
-                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+            elif param.name == "use_person_keypoint_filter":
+                self.use_person_keypoint_filter = bool(param.value)
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_settings()
                 if not keypoint_filter_valid:
                     return SetParametersResult(successful=False, reason=keypoint_filter_reason)
-                self.get_logger().info(f"Updated use_keypoint_filter: {self.use_keypoint_filter}")
-            elif param.name == "keypoint_name_list":
-                self.keypoint_name_list = list(param.value)
+                self.get_logger().info(f"Updated use_person_keypoint_filter: {self.use_person_keypoint_filter}")
+            elif param.name == "keypoint_publish_names":
+                self.keypoint_publish_names = list(param.value)
                 self._validate_keypoint_name_list()
-                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_settings()
                 if not keypoint_filter_valid:
                     return SetParametersResult(successful=False, reason=keypoint_filter_reason)
-                self.get_logger().info(f"Updated keypoint_name_list: {self.keypoint_name_list}")
-            elif param.name == "keypoint_filter_names":
-                self.keypoint_filter_names = list(param.value)
-                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                self.get_logger().info(f"Updated keypoint_publish_names: {self.keypoint_publish_names}")
+            elif param.name == "person_keypoint_filter_names":
+                self.person_keypoint_filter_names = list(param.value)
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_settings()
                 if not keypoint_filter_valid:
                     return SetParametersResult(successful=False, reason=keypoint_filter_reason)
-                self.get_logger().info(f"Updated keypoint_filter_names: {self.keypoint_filter_names}")
-            elif param.name == "keypoint_conf_threshold":
-                value = float(param.value)
-                if not 0.0 < value <= 1.0:
-                    return SetParametersResult(successful=False, reason="keypoint_conf_threshold must be in (0.0, 1.0]")
-                self.keypoint_conf_threshold = value
-                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_filter_settings()
+                self._reset_tracking_state()
+                self.get_logger().info(f"Updated person_keypoint_filter_names: {self.person_keypoint_filter_names}")
+            elif param.name == "keypoint_trail_names":
+                self.keypoint_trail_names = list(param.value)
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_settings()
                 if not keypoint_filter_valid:
                     return SetParametersResult(successful=False, reason=keypoint_filter_reason)
-                self.get_logger().info(f"Updated keypoint_conf_threshold: {self.keypoint_conf_threshold}")
+                self.keypoint_trail_history.clear()
+                self.get_logger().info(f"Updated keypoint_trail_names: {self.keypoint_trail_names}")
             elif param.name == "conf":
                 value = float(param.value)
                 if not 0.0 < value <= 1.0:
@@ -619,11 +702,22 @@ class YoloNode(LifecycleNode):
                 self._reset_tracking_state()
                 self.get_logger().info(f"Updated use_tracking: {self.use_tracking}")
                 self.get_logger().info(f"Updated yolo_mode: {self.yolo_mode}")
-            elif param.name == "draw_trails":
-                self.draw_trails = bool(param.value)
-                if not self.draw_trails:
+            elif param.name == "trail_mode":
+                value = str(param.value)
+                if value not in self._TRAIL_MODE_CHOICES:
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f"trail_mode must be one of {self._TRAIL_MODE_CHOICES}",
+                    )
+                self.trail_mode = value
+                keypoint_filter_valid, keypoint_filter_reason = self._validate_keypoint_settings()
+                if not keypoint_filter_valid:
+                    return SetParametersResult(successful=False, reason=keypoint_filter_reason)
+                if not self._draw_bbox_trails_enabled():
                     self.track_history.clear()
-                self.get_logger().info(f"Updated draw_trails: {self.draw_trails}")
+                if not self._draw_keypoint_trails_enabled():
+                    self.keypoint_trail_history.clear()
+                self.get_logger().info(f"Updated trail_mode: {self.trail_mode}")
             elif param.name == "trail_length":
                 value = int(param.value)
                 if value <= 0:
@@ -740,6 +834,7 @@ class YoloNode(LifecycleNode):
         self.get_logger().info("Deactivating...")
         self._destroy_subscription()
         self.track_history.clear()
+        self.keypoint_trail_history.clear()
         return super().on_deactivate(state)
 
     def _remove_param_cb(self) -> None:
@@ -804,7 +899,7 @@ class YoloNode(LifecycleNode):
         result = self._apply_keypoint_filter(results[0])
 
         annotated_frame = result.plot(line_width=self.line_width)
-        if self.use_tracking and self.draw_trails and result.boxes is not None and result.boxes.id is not None:
+        if self.use_tracking and self._draw_bbox_trails_enabled() and result.boxes is not None and result.boxes.id is not None:
             boxes = result.boxes.xywh.cpu().numpy()
             track_ids = result.boxes.id.cpu().numpy()
             for box, track_id in zip(boxes, track_ids):
@@ -818,6 +913,28 @@ class YoloNode(LifecycleNode):
                     pt1 = (int(history[idx - 1][0]), int(history[idx - 1][1]))
                     pt2 = (int(history[idx][0]), int(history[idx][1]))
                     cv2.line(annotated_frame, pt1, pt2, (0, 255, 0), self.line_width)
+        if self.use_tracking and self._draw_keypoint_trails_enabled() and result.boxes is not None and result.boxes.id is not None and result.keypoints is not None:
+            track_ids = result.boxes.id.cpu().numpy()
+            name_to_idx = {name: idx for idx, name in enumerate(self._model_keypoint_names())}
+            for det_idx, track_id in enumerate(track_ids):
+                for name in self._trail_keypoint_names():
+                    kp_idx = name_to_idx.get(name)
+                    if kp_idx is None or not self._is_keypoint_visible(result, det_idx, kp_idx):
+                        continue
+                    point = result.keypoints[det_idx].xy[0][kp_idx]
+                    center = (
+                        float(self._extract_scalar_value(point[0])),
+                        float(self._extract_scalar_value(point[1])),
+                    )
+                    history = self.keypoint_trail_history[(int(track_id), name)]
+                    history.append(center)
+                    if len(history) > self.trail_length:
+                        history.pop(0)
+
+                    for idx in range(1, len(history)):
+                        pt1 = (int(history[idx - 1][0]), int(history[idx - 1][1]))
+                        pt2 = (int(history[idx][0]), int(history[idx][1]))
+                        cv2.line(annotated_frame, pt1, pt2, (0, 255, 0), self.line_width)
         det_img = self._cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
         det_img.header = header
 
@@ -852,11 +969,23 @@ class YoloNode(LifecycleNode):
             det_array.detections.append(det)
 
             if result.keypoints is not None:
-                kp = KeyPoint(key_names=self.keypoint_name_list, score=score)
-                for p in result.keypoints[i].xy[0]:
-                    pt = Point(x=float(p[0]), y=float(p[1]), z=0.0)
-                    kp.key_points.append(pt)
-                kp_array.key_points_array.append(kp)
+                kp = KeyPoint(score=score)
+                publish_keypoint_names = self._publish_keypoint_names()
+                model_keypoint_names = self._model_keypoint_names()
+                if publish_keypoint_names and model_keypoint_names:
+                    name_to_idx = {name: idx for idx, name in enumerate(model_keypoint_names)}
+                    kp.key_names = [name for name in publish_keypoint_names if name in name_to_idx]
+                    for name in kp.key_names:
+                        point = result.keypoints[i].xy[0][name_to_idx[name]]
+                        pt = Point(x=float(point[0]), y=float(point[1]), z=0.0)
+                        kp.key_points.append(pt)
+                elif publish_keypoint_names:
+                    kp.key_names = publish_keypoint_names
+                    for p in result.keypoints[i].xy[0]:
+                        pt = Point(x=float(p[0]), y=float(p[1]), z=0.0)
+                        kp.key_points.append(pt)
+                if kp.key_points:
+                    kp_array.key_points_array.append(kp)
 
             if result.masks is not None:
                 mask = DetectMask(instance_id=det.id)

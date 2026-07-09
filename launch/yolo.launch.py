@@ -28,8 +28,9 @@ def generate_launch_description():
     tracker_with_reid = LaunchConfiguration("tracker_with_reid")
     tracker_reid_model = LaunchConfiguration("tracker_reid_model")
     tracker_reid_weights_path = LaunchConfiguration("tracker_reid_weights_path")
-    draw_trails = LaunchConfiguration("draw_trails")
+    trail_mode = LaunchConfiguration("trail_mode")
     use_detection_filter = LaunchConfiguration("use_detection_filter")
+    use_person_keypoint_filter = LaunchConfiguration("use_person_keypoint_filter")
     image_reliability = LaunchConfiguration("image_reliability")
     device = LaunchConfiguration("device")
     fuse = LaunchConfiguration("fuse")
@@ -149,14 +150,19 @@ def generate_launch_description():
             description="Whether to enable ReID for BoT-SORT, Deep OC-SORT, or TrackTrack",
         ),
         DeclareLaunchArgument(
-            "draw_trails",
-            default_value="true",
-            description="Whether to draw trajectory trails for tracked objects",
+            "trail_mode",
+            default_value="keypoint",
+            description="Trail mode: false, bbox, keypoint, or all",
         ),
         DeclareLaunchArgument(
             "use_detection_filter",
-            default_value="true",
+            default_value="false",
             description="Use filter_classes from detection_filters.yaml",
+        ),
+        DeclareLaunchArgument(
+            "use_person_keypoint_filter",
+            default_value="true",
+            description="Use person_keypoint_filter_names from key_point_dictionary.yaml for pose filtering",
         ),
         DeclareLaunchArgument(
             "image_reliability",
@@ -231,8 +237,9 @@ def generate_launch_description():
                 "tracker_with_reid": tracker_with_reid,
                 "tracker_reid_model": tracker_reid_model,
                 "tracker_reid_weights_path": tracker_reid_weights_path,
-                "draw_trails": draw_trails,
+                "trail_mode": trail_mode,
                 "use_detection_filter": use_detection_filter,
+                "use_person_keypoint_filter": use_person_keypoint_filter,
                 "image_reliability": image_reliability,
                 "device": device,
                 "fuse": fuse,
