@@ -22,6 +22,7 @@ def generate_launch_description():
     auto_activate_3d = LaunchConfiguration("auto_activate_3d")
     conf = LaunchConfiguration("conf")
     iou = LaunchConfiguration("iou")
+    keypoint_conf = LaunchConfiguration("keypoint_conf")
     image_reliability = LaunchConfiguration("image_reliability")
     device = LaunchConfiguration("device")
     fuse = LaunchConfiguration("fuse")
@@ -50,8 +51,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "weight_file",
-            default_value="yolo26m.pt",       # YOLOv26
-            # default_value="yolo26m-pose.pt",  # KeyPoint model
+            # default_value="yolo26m.pt",       # YOLOv26
+            default_value="yolo26m-pose.pt",  # KeyPoint model
             # default_value="yolo26m-seg.pt",   # Segmentation
             # default_value="yolo26m-sem.pt",   # Semantic Segmentation
             # default_value="yoloe-26m-seg.pt", # YOLO-E segmentation
@@ -106,6 +107,11 @@ def generate_launch_description():
             "iou",
             default_value="0.7",
             description="IoU threshold",
+        ),
+        DeclareLaunchArgument(
+            "keypoint_conf",
+            default_value="0.0",
+            description="Pose models: drop keypoints below this confidence (0.0 keeps all)",
         ),
         DeclareLaunchArgument(
             "image_reliability",
@@ -171,6 +177,7 @@ def generate_launch_description():
                 "auto_activate": auto_activate_2d,
                 "conf": conf,
                 "iou": iou,
+                "keypoint_conf": keypoint_conf,
                 "image_reliability": image_reliability,
                 "device": device,
                 "fuse": fuse,

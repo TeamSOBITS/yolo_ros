@@ -34,6 +34,10 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("auto_activate", True)
         self.declare_parameter("conf", 0.35)
         self.declare_parameter("iou", 0.7)
+        # Pose models only. Keypoints below this confidence are left out of the
+        # message instead of being published at YOLO's guessed position.
+        # 0.0 publishes every keypoint (the previous behaviour).
+        self.declare_parameter("keypoint_conf", 0.0)
 
         self.declare_parameter("filter_classes", [""])
         self.declare_parameter("keypoint_name_list", [""])
@@ -55,6 +59,7 @@ class YoloNode(LifecycleNode):
         self.weights_path = ""
         self.conf = 0.35
         self.iou = 0.7
+        self.keypoint_conf = 0.0
         self.filter_classes = [""]
         self.keypoint_name_list = [""]
         self.yoloe_prompts = [""]
@@ -74,6 +79,7 @@ class YoloNode(LifecycleNode):
         self.weights_path = self.get_parameter("weights_path").get_parameter_value().string_value
         self.conf = self.get_parameter("conf").get_parameter_value().double_value
         self.iou = self.get_parameter("iou").get_parameter_value().double_value
+        self.keypoint_conf = self.get_parameter("keypoint_conf").get_parameter_value().double_value
 
         self.filter_classes = self.get_parameter("filter_classes").get_parameter_value().string_array_value
         self.keypoint_name_list = self.get_parameter("keypoint_name_list").get_parameter_value().string_array_value
@@ -88,6 +94,9 @@ class YoloNode(LifecycleNode):
         if not 0.0 < self.iou <= 1.0:
             self.get_logger().error(f"iou must be in (0.0, 1.0], got {self.iou}")
             return TransitionCallbackReturn.FAILURE
+        if not 0.0 <= self.keypoint_conf <= 1.0:
+            self.get_logger().error(f"keypoint_conf must be in [0.0, 1.0], got {self.keypoint_conf}")
+            return TransitionCallbackReturn.FAILURE
         if self.image_reliability not in self._RELIABILITY_MAP:
             self.get_logger().error(
                 f"image_reliability must be one of {list(self._RELIABILITY_MAP)}, got '{self.image_reliability}'"
@@ -99,6 +108,7 @@ class YoloNode(LifecycleNode):
         self.get_logger().info(f"Weights path: {self.weights_path}")
         self.get_logger().info(f"Conf: {self.conf}")
         self.get_logger().info(f"IoU: {self.iou}")
+        self.get_logger().info(f"Keypoint conf: {self.keypoint_conf}")
         self.get_logger().info(f"Filter classes: {self.filter_classes}")
         self.get_logger().info(f"Keypoint name list: {self.keypoint_name_list}")
         self.get_logger().info(f"YOLOE prompts: {self.yoloe_prompts}")
@@ -262,6 +272,12 @@ class YoloNode(LifecycleNode):
                     return SetParametersResult(successful=False, reason="iou must be in (0.0, 1.0]")
                 self.iou = value
                 self.get_logger().info(f"Updated iou: {self.iou}")
+            elif param.name == "keypoint_conf":
+                value = float(param.value)
+                if not 0.0 <= value <= 1.0:
+                    return SetParametersResult(successful=False, reason="keypoint_conf must be in [0.0, 1.0]")
+                self.keypoint_conf = value
+                self.get_logger().info(f"Updated keypoint_conf: {self.keypoint_conf}")
             elif param.name == "image_reliability":
                 if self._state_machine.current_state[1] == "active":
                     return SetParametersResult(
@@ -388,10 +404,22 @@ class YoloNode(LifecycleNode):
             det_array.detections.append(det)
 
             if result.keypoints is not None:
-                kp = KeyPoint(key_names=self.keypoint_name_list, score=score)
-                for p in result.keypoints[i].xy[0]:
-                    pt = Point(x=float(p[0]), y=float(p[1]), z=0.0)
-                    kp.key_points.append(pt)
+                kp_conf = result.keypoints[i].conf
+                if self.keypoint_conf > 0.0 and kp_conf is not None:
+                    # Hidden joints still come out of YOLO at a guessed pixel,
+                    # which often lands on the background and projects to 3D
+                    # far behind the person. Drop them; names stay paired.
+                    kp = KeyPoint(score=score)
+                    for name, p, c in zip(self.keypoint_name_list, result.keypoints[i].xy[0], kp_conf[0]):
+                        if float(c) < self.keypoint_conf:
+                            continue
+                        kp.key_names.append(name)
+                        kp.key_points.append(Point(x=float(p[0]), y=float(p[1]), z=0.0))
+                else:
+                    kp = KeyPoint(key_names=self.keypoint_name_list, score=score)
+                    for p in result.keypoints[i].xy[0]:
+                        pt = Point(x=float(p[0]), y=float(p[1]), z=0.0)
+                        kp.key_points.append(pt)
                 kp_array.key_points_array.append(kp)
 
             if result.masks is not None:
