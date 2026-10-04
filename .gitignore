@@ -4,3 +4,16 @@
 *.engine
 *.torchscript
 *.openvino
+
+# Instructions for coding agents (kept local, not part of the package)
+AGENTS.md
+CLAUDE.md
+
+# Python / tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# GUI settings, screenshots and logs if YOLO_ROS_DATA_ROOT points into the package
+data/

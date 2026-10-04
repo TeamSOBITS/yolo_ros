@@ -1,7 +1,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
@@ -37,8 +37,23 @@ def generate_launch_description():
     use_bbox_to_3d = LaunchConfiguration("use_bbox_to_3d")
     use_keypoint_to_3d = LaunchConfiguration("use_keypoint_to_3d")
     use_mask_to_3d = LaunchConfiguration("use_mask_to_3d")
+    use_gui = LaunchConfiguration("use_gui")
+    imgsz = LaunchConfiguration("imgsz")
+    half = LaunchConfiguration("half")
+    max_rate_hz = LaunchConfiguration("max_rate_hz")
+    trail_length = LaunchConfiguration("trail_length")
+    line_width = LaunchConfiguration("line_width")
 
     launch_args = [
+        DeclareLaunchArgument(
+            "use_gui",
+            default_value="false",
+            description=(
+                "Start the yolo_gui window to start/stop and configure YOLO, the camera and the "
+                "3D nodes. With the GUI, YOLO waits configured until its start button. "
+                "Closing the GUI stops this launch."
+            ),
+        ),
         DeclareLaunchArgument(
             "namespace",
             default_value="",
@@ -161,18 +176,48 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "use_person_keypoint_filter",
-            default_value="true",
+            # 鼻などが見えない人（後ろ姿）も残すため既定は OFF（osnet_ros の人物識別で後ろ姿も使う）
+            default_value="false",
             description="Use person_keypoint_filter_names from key_point_dictionary.yaml for pose filtering",
         ),
         DeclareLaunchArgument(
             "image_reliability",
-            default_value="best_effort",
-            description="QoS reliability for the image subscription: 'best_effort', 'reliable', 'system_default', 'best_available', or 'unknown'",
+            default_value="auto",
+            description=(
+                "QoS reliability for the image subscription: 'auto' (subscribe reliable and "
+                "best_effort, works with any camera), 'best_effort', 'reliable', 'system_default', "
+                "'best_available', or 'unknown'"
+            ),
         ),
         DeclareLaunchArgument(
             "device",
             default_value="cuda",
             description="Inference device: 'cuda', 'cpu', or 'cuda:0'",
+        ),
+        DeclareLaunchArgument(
+            "imgsz",
+            default_value="640",
+            description="Inference input size in pixels (larger: smaller objects, slower)",
+        ),
+        DeclareLaunchArgument(
+            "half",
+            default_value="false",
+            description="FP16 inference (faster on CUDA, no effect on CPU)",
+        ),
+        DeclareLaunchArgument(
+            "max_rate_hz",
+            default_value="0.0",
+            description="Process at most this many frames per second (0: every frame)",
+        ),
+        DeclareLaunchArgument(
+            "trail_length",
+            default_value="30",
+            description="Number of frames a movement trail keeps",
+        ),
+        DeclareLaunchArgument(
+            "line_width",
+            default_value="2",
+            description="Line width of boxes and trails in detected_image",
         ),
         DeclareLaunchArgument(
             "fuse",
@@ -225,7 +270,14 @@ def generate_launch_description():
                 "weight_file": weight_file,
                 "weights_path": weights_path,
                 "auto_configure": auto_configure_2d,
-                "auto_activate": auto_activate_2d,
+                # With the GUI, YOLO waits (model loaded) until the GUI's start button.
+                "auto_activate": ParameterValue(
+                    PythonExpression(
+                        ["'", auto_activate_2d, "'.lower() == 'true' and '", use_gui,
+                         "'.lower() != 'true'"]
+                    ),
+                    value_type=bool,
+                ),
                 "conf": conf,
                 "iou": iou,
                 "yolo_mode": mode,
@@ -243,12 +295,28 @@ def generate_launch_description():
                 "image_reliability": image_reliability,
                 "device": device,
                 "fuse": fuse,
+                "imgsz": ParameterValue(imgsz, value_type=int),
+                "half": ParameterValue(half, value_type=bool),
+                "max_rate_hz": ParameterValue(max_rate_hz, value_type=float),
+                "trail_length": ParameterValue(trail_length, value_type=int),
+                "line_width": ParameterValue(line_width, value_type=int),
             },
             yoloe_prompts,
             detection_filters,
             keypoint_dictionary,
         ],
         output="screen"
+    )
+
+    yolo_gui_cmd = Node(
+        package="yolo_ros",
+        executable="yolo_gui",
+        name="yolo_gui",
+        namespace=namespace,
+        parameters=[{"detector_node": LaunchConfiguration("node_name")}],
+        output="screen",
+        condition=IfCondition(use_gui),
+        on_exit=Shutdown(reason="YOLO GUI closed"),
     )
 
     bbox_to_3d_cmd = IncludeLaunchDescription(
@@ -296,6 +364,7 @@ def generate_launch_description():
     return LaunchDescription(
         launch_args + [
             yolo_node_cmd,
+            yolo_gui_cmd,
             bbox_to_3d_cmd,
             keypoint_to_3d_cmd,
             mask_to_3d_cmd,
